@@ -4,15 +4,18 @@ import { KERB } from './city/streets'
 import { PROPS } from './engine/util'
 
 /**
- * Walking the streets at eye height: drag or click-and-lock the mouse to look, WASD or the arrows to walk, Shift to
- * hurry. The walker is a circle 30 cm across its middle on the plan and slides along the walls it meets; the eye rises
- * a kerb's height onto a sidewalk and steps down off it, and Space jumps. F flies (no walls, Space and C up and down),
- * for a look from above. On a touch screen the left half of the screen walks as a stick, the right half looks, and a
- * double tap there jumps.
+ * Walking the streets at eye height: drag the view round (as a street panorama is dragged) or click to lock the mouse
+ * and look as in a game, WASD or the arrows to walk, Shift to hurry. The walker is a circle 30 cm across its middle on
+ * the plan and slides along the walls it meets; the eye rises a kerb's height onto a sidewalk and steps down off it, and
+ * Space jumps. E rises into the air and Q comes down (no walls up there), back to walking on reaching the ground; F
+ * takes off or lands at once. On a touch screen the left half of the screen walks as a stick, the right half looks,
+ * and a double tap there jumps.
  */
 
 const EYE = 1.65
 const RADIUS = 0.3
+/** The near plane on foot, metres: inside the walker's radius, so a wall they stand against is never cut open. */
+const NEAR = 0.2
 const SPEED = 1.5
 const HURRY = 4.2
 const FLY = 18
@@ -36,7 +39,7 @@ export interface World {
 }
 
 export function walker(canvas: HTMLCanvasElement, world: World, start: { x: number; z: number; heading: number; pitch?: number; height?: number }): Walker {
-  const camera = new THREE.PerspectiveCamera(62, canvas.clientWidth / canvas.clientHeight, 0.1, 6000)
+  const camera = new THREE.PerspectiveCamera(62, canvas.clientWidth / canvas.clientHeight, NEAR, 6000)
   // Trees, lights and tanks are on the props layer (left out of the baked sky occlusion), and the walker sees them.
   camera.layers.enable(PROPS)
   // A height given starts the walker flying there, for a look from above.
@@ -68,9 +71,14 @@ export function walker(canvas: HTMLCanvasElement, world: World, start: { x: numb
     if (e.code === 'KeyF') {
       fly = !fly
       if (!fly) at.y = groundAt(at.x, at.z) + EYE
+      else at.y = Math.max(at.y, groundAt(at.x, at.z) + EYE + 30)
       dirty = true
     }
-    if (e.code === 'Space' && !e.repeat) jump()
+    if (e.code === 'Space') {
+      // Not the page scrolling, nor a focused link following.
+      e.preventDefault()
+      if (!e.repeat) jump()
+    }
     keys.add(e.code)
   })
   addEventListener('keyup', (e) => keys.delete(e.code))
@@ -92,8 +100,9 @@ export function walker(canvas: HTMLCanvasElement, world: World, start: { x: numb
   addEventListener('mousemove', (e) => {
     if (document.pointerLockElement === canvas) turn(e.movementX, e.movementY)
     else if (drag.down) {
+      // Dragging takes hold of the view and pulls it, as a street panorama: drag left and the view turns right.
       drag.moved += Math.abs(e.movementX) + Math.abs(e.movementY)
-      turn(e.movementX, e.movementY)
+      turn(-e.movementX, -e.movementY)
     }
   })
   canvas.addEventListener('pointerdown', (e) => {
@@ -108,7 +117,7 @@ export function walker(canvas: HTMLCanvasElement, world: World, start: { x: numb
   canvas.addEventListener('pointermove', (e) => {
     if (e.pointerId === stick.id) Object.assign(stick, { dx: (e.clientX - stick.x) / 60, dy: (e.clientY - stick.y) / 60 })
     if (e.pointerId === look.id) {
-      turn((e.clientX - look.x) * 1.6, (e.clientY - look.y) * 1.6)
+      turn(-(e.clientX - look.x) * 1.6, -(e.clientY - look.y) * 1.6)
       Object.assign(look, { x: e.clientX, y: e.clientY })
     }
   })
@@ -139,7 +148,12 @@ export function walker(canvas: HTMLCanvasElement, world: World, start: { x: numb
     const k = (code: string) => (keys.has(code) ? 1 : 0)
     const forward = k('KeyW') + k('ArrowUp') - k('KeyS') - k('ArrowDown') - stick.dy
     const right = k('KeyD') + k('ArrowRight') - k('KeyA') - k('ArrowLeft') + stick.dx
-    const up = k('Space') - k('KeyC')
+    const up = k('KeyE') + k('PageUp') - k('KeyQ') - k('PageDown')
+    // Rising takes off; coming down to the ground lands.
+    if (up > 0 && !fly) {
+      fly = true
+      air = rise = 0
+    }
     const moving = forward || right || (fly && up)
     if (moving) {
       const speed = fly ? FLY * (keys.has('ShiftLeft') ? 4 : 1) : keys.has('ShiftLeft') || keys.has('ShiftRight') ? HURRY : SPEED
@@ -149,8 +163,14 @@ export function walker(canvas: HTMLCanvasElement, world: World, start: { x: numb
       const next = at.clone()
       next.x += (-sin * forward + cos * right) * step
       next.z += (-cos * forward - sin * right) * step
-      if (fly) next.y = Math.max(1, next.y + up * speed * dt)
-      else collide(next)
+      if (fly) {
+        const ground = groundAt(next.x, next.z) + EYE
+        next.y += up * Math.max(speed, 6) * dt
+        if (next.y <= ground) {
+          next.y = ground
+          fly = false
+        }
+      } else collide(next)
       at.copy(next)
       dirty = true
     }
@@ -173,6 +193,12 @@ export function walker(canvas: HTMLCanvasElement, world: World, start: { x: numb
       yaw += (aimYaw - yaw) * k
       pitch += (aimPitch - pitch) * k
       dirty = true
+    }
+    // In the air the near plane steps out with the height: depth precision kept for the streets far below.
+    const near = fly ? THREE.MathUtils.clamp(at.y * 0.012, NEAR, 4) : NEAR
+    if (Math.abs(near - camera.near) > 0.02 || (near === NEAR && camera.near !== NEAR)) {
+      camera.near = near
+      camera.updateProjectionMatrix()
     }
     camera.position.copy(at)
     camera.position.y += air

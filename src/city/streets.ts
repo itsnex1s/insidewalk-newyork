@@ -121,8 +121,10 @@ export function ground(tile: Pick<TileData, 'roads' | 'setts' | 'sidewalks'>) {
 export function apron(box: CityIndex['box']) {
   const pad = 4000
   const { min, max } = box
-  const plane = new THREE.PlaneGeometry(max[0] - min[0] + 2 * pad, max[1] - min[1] + 2 * pad).rotateX(-Math.PI / 2).translate((min[0] + max[0]) / 2, -0.02, (min[1] + max[1]) / 2)
-  const material = new THREE.MeshStandardNodeMaterial({ roughness: 0.95 })
+  const plane = new THREE.PlaneGeometry(max[0] - min[0] + 2 * pad, max[1] - min[1] + 2 * pad).rotateX(-Math.PI / 2).translate((min[0] + max[0]) / 2, -0.1, (min[1] + max[1]) / 2)
+  // Drawn as if further off than it is: from the air or down a long street, where the depth buffer's steps are
+  // decimetres, the roadbeds over it would otherwise flicker through it.
+  const material = new THREE.MeshStandardNodeMaterial({ roughness: 0.95, polygonOffset: true, polygonOffsetFactor: 4, polygonOffsetUnits: 8 })
   material.colorNode = mix(color(0x55575a), color(0x6d6c69), noise01(xz.div(60)))
   return mesh(plane, material)
 }

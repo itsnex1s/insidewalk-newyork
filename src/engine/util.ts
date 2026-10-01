@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu'
+import { attribute, instanceColor, mat4, normalLocal, positionLocal, transformNormal } from 'three/tsl'
 
 /** One of `list`, by `random`. */
 export const pick = <T>(random: () => number, list: readonly T[]) => list[Math.floor(random() * list.length)]
@@ -124,6 +125,68 @@ export function merge(root: THREE.Object3D) {
     all.layers.mask = first.layers.mask
     root.add(all)
   }
+}
+
+/**
+ * three builds a shader's nodes apart for every instanced mesh (its uuid is in the render object's cache key), a few
+ * milliseconds a pass each: a tile's dozen of them were a tenth of a second of building each time one streamed in, and
+ * a hitch every few seconds at a run or in flight. A mesh made by shareShaders() is a plain mesh whose geometry carries
+ * its instances' matrices (and colours) as instanced attributes, which every material places it by below: its shader
+ * is the one every such mesh of the same material and attributes has, built once in the walk.
+ */
+const setupPosition = THREE.NodeMaterial.prototype.setupPosition
+THREE.NodeMaterial.prototype.setupPosition = function (this: THREE.NodeMaterial, builder: THREE.NodeBuilder) {
+  const has = (name: string) => !!builder.geometry?.hasAttribute(name)
+  if (has('iCol0')) {
+    const place = mat4(attribute('iCol0', 'vec4'), attribute('iCol1', 'vec4'), attribute('iCol2', 'vec4'), attribute('iCol3', 'vec4'))
+    positionLocal.assign(place.mul(positionLocal).xyz)
+    if (has('normal')) normalLocal.assign(transformNormal(normalLocal, place))
+    if (has('iColor')) instanceColor.assign(attribute('iColor', 'vec3'))
+  }
+  return setupPosition.call(this, builder)
+}
+
+/** The instanced meshes under `root` (after merge()) made over as plain meshes that share their shaders (above). */
+export function shareShaders(root: THREE.Object3D) {
+  const meshes: THREE.InstancedMesh[] = []
+  root.traverse((o) => {
+    if ((o as THREE.InstancedMesh).isInstancedMesh && !o.children.length) meshes.push(o as THREE.InstancedMesh)
+  })
+  for (const mesh of meshes) {
+    const geometry = new THREE.InstancedBufferGeometry()
+    // The shape's own buffers, shared with every other tile's: only the instances' are this mesh's.
+    geometry.index = mesh.geometry.index
+    for (const [name, a] of Object.entries(mesh.geometry.attributes)) geometry.setAttribute(name, a)
+    geometry.groups = mesh.geometry.groups
+    const columns = new THREE.InstancedInterleavedBuffer(mesh.instanceMatrix.array, 16)
+    for (let i = 0; i < 4; i++) geometry.setAttribute(`iCol${i}`, new THREE.InterleavedBufferAttribute(columns, 4, i * 4))
+    if (mesh.instanceColor) geometry.setAttribute('iColor', mesh.instanceColor)
+    geometry.instanceCount = mesh.count
+    // Culled by where its instances stand, not where its shape does.
+    mesh.computeBoundingBox()
+    mesh.computeBoundingSphere()
+    geometry.boundingBox = mesh.boundingBox
+    geometry.boundingSphere = mesh.boundingSphere
+    const shared = new THREE.Mesh(geometry, mesh.material)
+    shared.position.copy(mesh.position)
+    shared.quaternion.copy(mesh.quaternion)
+    shared.scale.copy(mesh.scale)
+    shared.layers.mask = mesh.layers.mask
+    shared.castShadow = mesh.castShadow
+    shared.receiveShadow = mesh.receiveShadow
+    shared.renderOrder = mesh.renderOrder
+    // NodeMaterial multiplies the diffuse colour by the instance's where the object has instance colours.
+    if (mesh.instanceColor) Object.assign(shared, { instanceColor: mesh.instanceColor })
+    const parent = mesh.parent!
+    parent.children[parent.children.indexOf(mesh)] = shared
+    shared.parent = parent
+    mesh.parent = null
+  }
+}
+
+/** The matrix of instance `k` of a mesh made by shareShaders(), into `m`. */
+export function sharedMatrixAt(geometry: THREE.InstancedBufferGeometry, k: number, m: THREE.Matrix4) {
+  return m.fromArray((geometry.getAttribute('iCol0') as THREE.InterleavedBufferAttribute).data.array, k * 16)
 }
 
 /** A flat rectangle on the ground, centred at (x, z), `y` above it. */

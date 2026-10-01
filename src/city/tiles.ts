@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu'
-import { merge } from '../engine/util'
+import { merge, shareShaders } from '../engine/util'
 import { type Segment, buildings } from './buildings'
 import { type CityIndex, Grid, loadTile, polygonIndex, type TileData } from './data'
 import { lights, trees } from './planting'
@@ -50,12 +50,16 @@ interface Tile {
   walks?: ReturnType<typeof polygonIndex>
 }
 
-/** Takes `group` off the scene and frees its geometry; instanced meshes share theirs (trees, lights, tanks), so only their instance buffers go. */
+/**
+ * Takes `group` off the scene and frees its geometry. Meshes of instances (shareShaders) share their shape's buffers
+ * with every other tile's (trees, lights, tanks), which disposing their geometry would free: they are let go of, and
+ * their own small instance buffers with them when they are collected.
+ */
 function dispose(group: THREE.Group) {
   group.removeFromParent()
   group.traverse((o) => {
-    if ((o as THREE.InstancedMesh).isInstancedMesh) (o as THREE.InstancedMesh).dispose()
-    else if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).geometry.dispose()
+    const mesh = o as THREE.Mesh
+    if (mesh.isMesh && !(mesh.geometry as THREE.InstancedBufferGeometry).isInstancedBufferGeometry) mesh.geometry.dispose()
   })
 }
 
@@ -206,6 +210,7 @@ export class Tiles {
     if (level >= Level.Mid && data.trees.length) group.add(trees(data.trees, near))
     if (near && data.lamps.length) group.add(lights(data.lamps))
     merge(group)
+    shareShaders(group)
     // Nothing in a tile moves: its matrices are worked out once here, not walked through every frame.
     group.updateMatrixWorld(true)
     group.traverse((o) => {
@@ -267,6 +272,12 @@ export class Tiles {
   streetsAt(x: number, z: number) {
     const reach = this.index.tile
     return this.tiles.filter((t) => t.data && Math.abs(t.x - x) < reach && Math.abs(t.z - z) < reach).flatMap((t) => t.data!.streets)
+  }
+
+  /** The tiles whose data is in within `reach` metres of (x, z) (as squares), for the minimap: built or not. */
+  dataAround(x: number, z: number, reach: number) {
+    const r = reach + this.index.tile / 2
+    return this.tiles.filter((t) => t.data && Math.abs(t.x - x) < r && Math.abs(t.z - z) < r) as (Tile & { data: TileData })[]
   }
 
   /** How many tiles there are at each level, for the dev readout. */

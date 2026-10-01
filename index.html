@@ -55,8 +55,30 @@
       #title .brand { filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.5)); }
       #title > span { font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.85; }
       #place { top: calc(max(14px, env(safe-area-inset-top)) + 46px); font: italic 400 24px/1.1 var(--serif); pointer-events: none; }
-      #hint { bottom: max(14px, env(safe-area-inset-bottom)); font-size: 13px; pointer-events: none; }
+      #hint { bottom: max(14px, env(safe-area-inset-bottom)); right: 200px; font-size: 13px; pointer-events: none; }
       body.ready #hint { opacity: 0.8; }
+
+      /* The map, round in the corner as in a driving game: drawn by src/minimap.ts. */
+      #minimap { left: auto; right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); width: 168px; height: 168px; border-radius: 50%; box-shadow: 0 0 0 3px rgba(14, 15, 17, 0.55), 0 0 0 4px rgba(246, 241, 234, 0.35), 0 6px 24px rgba(0, 0, 0, 0.45); pointer-events: none; }
+
+      /* The other tours, top right. */
+      #more { left: auto; right: max(16px, env(safe-area-inset-right)); top: max(14px, env(safe-area-inset-top)); display: grid; gap: 8px; padding: 10px 12px 11px; width: 212px; border-radius: 12px; background: rgba(20, 21, 23, 0.62); -webkit-backdrop-filter: blur(14px) saturate(1.2); backdrop-filter: blur(14px) saturate(1.2); box-shadow: inset 0 0 0 1px rgba(246, 241, 234, 0.12), 0 8px 28px rgba(0, 0, 0, 0.35); color: var(--paper); text-decoration: none; text-shadow: none; }
+      #more:hover { background: rgba(20, 21, 23, 0.78); }
+      #more:hover .go { color: var(--accent); }
+      #more .kicker { font-size: 11px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.7; }
+      #more .thumbs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+      #more img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 4px; }
+      #more .go { display: flex; justify-content: space-between; align-items: baseline; font: italic 400 18px/1.1 var(--serif); transition: color 0.2s; }
+      #more .go small { font: 500 11px/1 var(--sans); letter-spacing: 0.02em; opacity: 0.7; font-style: normal; }
+
+      @media (max-width: 640px), (max-height: 480px) {
+        #hint { display: none; }
+        #minimap { width: 116px; height: 116px; }
+        #more { width: auto; padding: 8px 10px; gap: 0; }
+        #more .kicker, #more .thumbs { display: none; }
+        #more .go { font-size: 15px; gap: 8px; }
+        #place { font-size: 19px; }
+      }
 
       /* The loading screen: the opening view as a still while the city is fetched and built behind it, then the 3D fades in where the still was. */
       #loader { position: fixed; inset: 0; overflow: hidden; background: #2a2c2f; transition: opacity 0.9s ease, visibility 0s 0.9s; }
@@ -96,7 +118,17 @@
       <span>Lower Manhattan, New York</span>
     </div>
     <div id="place" class="hud"></div>
-    <div id="hint" class="hud">Drag or click to look · WASD to walk · Space to jump · Shift to hurry · F to fly</div>
+    <div id="hint" class="hud">Drag or click to look · WASD to walk · Shift to hurry · Space to jump · E / Q up and down · F to fly</div>
+    <canvas id="minimap" class="hud" aria-hidden="true"></canvas>
+    <a id="more" class="hud" href="https://tours.insidewalk.app/" target="_blank" rel="noopener">
+      <span class="kicker">More from InsideWalk</span>
+      <span class="thumbs">
+        <img src="/tours/miami-192.webp" alt="Miami" width="192" height="108" loading="lazy" />
+        <img src="/tours/abu-dhabi-192.webp" alt="Abu Dhabi" width="192" height="108" loading="lazy" />
+        <img src="/tours/batumi-192.webp" alt="Batumi" width="192" height="108" loading="lazy" />
+      </span>
+      <span class="go">More 3D tours <small>→</small></span>
+    </a>
 
     <div id="loader" role="status" aria-live="polite">
       <img class="poster lqip" alt="" src="data:image/webp;base64,UklGRg4BAABXRUJQVlA4IAIBAACQBgCdASowABgAPtFgqFAoJSOipWmZABoJYwC06CM24scOx7REiAv32VdM1Zbq52OZGRAZemv0y0iVzwQAAP75+7ldQKO3Mm7zTL27hAI6w75E1dCYPxWqf0BcNb15Sje9Qt9TA1QUsHncfVYfSylk9UQ8Ttl2k/IxthTw7tTw0JcIorl7njmzhxC9+STt6VHmetW/jlXH9yyL2YI+Zohqzg9ECQIfZ1qtpAiXjsL8hq+KfLgs43IMjGsKGxjURkzVSujNgjEvAH3MABe0Ic+oGGQ6JOPlQnB2Z21xKzprnzzGbCuDVM4IwynaqyOqUoNuiQBH9KHQ9XH5H2JrkAOgAAA=" />

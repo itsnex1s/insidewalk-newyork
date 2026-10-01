@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu'
 import { Fn, float, If, normalWorld, positionWorld, smoothstep, texture, uniform, vec2 } from 'three/tsl'
-import { PROPS } from './util'
+import { PROPS, sharedMatrixAt } from './util'
 
 /**
  * How much of the sky each point of the city sees, baked once when the scene is built. Nothing in it moves, so its
@@ -95,7 +95,8 @@ function* heights(scene: THREE.Scene, size: number, cx: number, cz: number, data
     if (!o.parent) continue
     const position = mesh.geometry.getAttribute('position')
     if (!position) continue
-    // A tile's merged mesh wholly outside the square raises nothing: its vertices are not even looked at.
+    // A tile's merged mesh wholly outside the square raises nothing: its vertices are not even looked at. (A mesh of
+    // instances made by shareShaders() is bounded by its instances.)
     if (!(mesh as THREE.InstancedMesh).isInstancedMesh) {
       mesh.geometry.boundingSphere ?? mesh.geometry.computeBoundingSphere()
       const sphere = mesh.geometry.boundingSphere!
@@ -111,6 +112,12 @@ function* heights(scene: THREE.Scene, size: number, cx: number, cz: number, data
       for (let k = 0; k < instanced.count; k++) {
         instanced.getMatrixAt(k, instance)
         world.multiplyMatrices(mesh.matrixWorld, instance)
+        raise(world, position, top && upright(world) ? top : index)
+      }
+    } else if (mesh.geometry.hasAttribute('iCol0')) {
+      const geometry = mesh.geometry as THREE.InstancedBufferGeometry
+      for (let k = 0; k < geometry.instanceCount; k++) {
+        world.multiplyMatrices(mesh.matrixWorld, sharedMatrixAt(geometry, k, instance))
         raise(world, position, top && upright(world) ? top : index)
       }
     } else raise(mesh.matrixWorld, position, top && upright(mesh.matrixWorld) ? top : index)

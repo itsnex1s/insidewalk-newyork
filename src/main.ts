@@ -6,6 +6,7 @@ import { Tiles } from './city/tiles'
 import { type Look, outdoors, picture, reflectedSky } from './engine/look'
 import { initTextures, mapsLoaded, startTextures } from './engine/textures'
 import { cityReflections } from './engine/reflections'
+import { minimap } from './minimap'
 import { walker } from './walk'
 
 /** A late summer afternoon over Lower Manhattan: the sun in the south-west, warm haze, a few high clouds. */
@@ -143,8 +144,10 @@ async function main() {
     walk.camera.updateProjectionMatrix()
     redraw = 2
   })
+  const map = minimap(document.getElementById('minimap') as HTMLCanvasElement, tiles, index.tile)
   let last = performance.now()
   let labelAt = 0
+  let mapAt = 0
   let stillFor = 0
   let settleAt = 0
   const dev = { scene, camera: walk.camera, renderer, frames: 0, timings, streamer: tiles, tiles: () => tiles.counts(), redraw: () => (redraw = 2) }
@@ -181,6 +184,11 @@ async function main() {
     if (recapture) redraw = Math.max(redraw, 1)
     // Until the loading screen goes, every frame is drawn: it waits on frames.
     if (!revealed) redraw = Math.max(redraw, 1)
+    // The map 30 times a second at most: it turns and slides, nothing in it moves faster.
+    if (revealed && now - mapAt > 33) {
+      mapAt = now
+      map.draw(eye.x, eye.z, walk.camera.rotation.y)
+    }
     if (!moved && !shadow && redraw <= 0) return
     redraw = Math.max(0, redraw - 1)
     pipeline.render()
