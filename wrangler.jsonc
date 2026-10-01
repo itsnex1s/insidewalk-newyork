@@ -1,0 +1,11 @@
+// newyork.insidewalk.app: the Vite build served as Cloudflare Workers static assets, no Worker code.
+// Deploy: npm run build, then npx wrangler deploy. public/_headers keeps every response out of search indexes.
+{
+  "name": "castiron",
+  "compatibility_date": "2026-09-26",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "404-page"
+  },
+  "routes": [{ "pattern": "newyork.insidewalk.app", "custom_domain": true }]
+}

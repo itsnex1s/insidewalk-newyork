@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "castiron", "runtimeExecutable": "npx", "runtimeArgs": ["vite", "--port", "5240", "--strictPort"], "port": 5240 }
+  ]
+}
