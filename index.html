@@ -71,6 +71,40 @@
       #more .go { display: flex; justify-content: space-between; align-items: baseline; font: italic 400 18px/1.1 var(--serif); transition: color 0.2s; }
       #more .go small { font: 500 11px/1 var(--sans); letter-spacing: 0.02em; opacity: 0.7; font-style: normal; }
 
+      /* Touch screens (src/touch.ts): a stick under the left thumb, buttons by the right, as a phone game has them. */
+      .ctl { display: none; position: fixed; z-index: 2; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; transition: opacity 0.6s 0.4s; }
+      body.touch .ctl { display: grid; }
+      body:not(.ready) .ctl { opacity: 0; }
+      body.bare .ctl { display: none !important; }
+      #stick { left: calc(max(16px, env(safe-area-inset-left)) + 84px); top: calc(100% - max(16px, env(safe-area-inset-bottom)) - 96px); width: 128px; height: 128px; place-items: center; transform: translate(-50%, -50%); pointer-events: none; opacity: 0.5; transition: opacity 0.2s; }
+      #stick.held { opacity: 1; }
+      #stick .base { position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(circle, rgba(20, 21, 23, 0.18), rgba(20, 21, 23, 0.42)); box-shadow: inset 0 0 0 1.5px rgba(246, 241, 234, 0.45), 0 4px 18px rgba(0, 0, 0, 0.25); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+      #stick .knob { position: relative; width: 56px; height: 56px; border-radius: 50%; background: rgba(246, 241, 234, 0.92); box-shadow: 0 3px 12px rgba(0, 0, 0, 0.35); transition: background 0.15s; }
+      #stick:not(.held) .knob { transition: transform 0.18s ease-out, background 0.15s; }
+      #stick .run { position: absolute; top: -30px; left: 50%; transform: translateX(-50%); padding: 3px 9px; border-radius: 99px; font: 600 10px/1.2 var(--sans); letter-spacing: 0.12em; text-transform: uppercase; color: var(--paper); background: rgba(20, 21, 23, 0.55); opacity: 0; transition: opacity 0.2s, background 0.15s; }
+      #stick.held .run { opacity: 0.85; }
+      #stick.run .run { background: var(--accent); opacity: 1; }
+      #stick.run .knob { background: var(--accent); }
+      .btn { margin: 0; padding: 0; border: 0; -webkit-appearance: none; appearance: none; cursor: pointer; place-items: center; align-content: center; gap: 1px; border-radius: 50%; color: var(--paper); background: rgba(20, 21, 23, 0.42); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); box-shadow: inset 0 0 0 1.5px rgba(246, 241, 234, 0.4), 0 4px 18px rgba(0, 0, 0, 0.25); font: 600 9px/1 var(--sans); letter-spacing: 0.1em; text-transform: uppercase; transition: transform 0.08s, background 0.12s, opacity 0.6s 0.4s; }
+      .btn.down { transform: scale(0.92); background: rgba(232, 135, 92, 0.75); }
+      .btn svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+      #jump { right: calc(max(16px, env(safe-area-inset-right)) + 12px); bottom: calc(max(16px, env(safe-area-inset-bottom)) + 18px); width: 76px; height: 76px; }
+      #jump svg { width: 30px; height: 30px; }
+      #fly { right: calc(max(16px, env(safe-area-inset-right)) + 104px); bottom: calc(max(16px, env(safe-area-inset-bottom)) + 4px); width: 56px; height: 56px; }
+      #rise { right: calc(max(16px, env(safe-area-inset-right)) + 16px); bottom: calc(max(16px, env(safe-area-inset-bottom)) + 92px); width: 68px; height: 68px; }
+      #sink { right: calc(max(16px, env(safe-area-inset-right)) + 16px); bottom: calc(max(16px, env(safe-area-inset-bottom)) + 14px); width: 68px; height: 68px; }
+      body.touch.flying #jump, body.touch:not(.flying) #rise, body.touch:not(.flying) #sink { display: none; }
+      #fly .land, body.flying #fly .air { display: none; }
+      body.flying #fly .land { display: block; }
+      #coach { left: 50%; bottom: calc(max(16px, env(safe-area-inset-bottom)) + 150px); transform: translateX(-50%); padding: 9px 16px; border-radius: 99px; white-space: nowrap; font: 500 13px/1.3 var(--sans); color: var(--paper); background: rgba(20, 21, 23, 0.6); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); pointer-events: none; transition: opacity 0.8s; }
+      #coach.gone { opacity: 0 !important; }
+      /* With the thumbs on the bottom corners, the map goes up under the tours' link, which is a pill. */
+      body.touch #hint { display: none; }
+      body.touch #minimap { top: calc(max(14px, env(safe-area-inset-top)) + 50px); bottom: auto; width: 112px; height: 112px; }
+      body.touch #more { width: auto; padding: 8px 10px; gap: 0; }
+      body.touch #more .kicker, body.touch #more .thumbs { display: none; }
+      body.touch #more .go { font-size: 15px; gap: 8px; }
+
       @media (max-width: 640px), (max-height: 480px) {
         #hint { display: none; }
         #minimap { width: 116px; height: 116px; }
@@ -120,6 +154,12 @@
     <div id="place" class="hud"></div>
     <div id="hint" class="hud">Drag or click to look · WASD to walk · Shift to hurry · Space to jump · E / Q up and down · F to fly</div>
     <canvas id="minimap" class="hud" aria-hidden="true"></canvas>
+    <div id="stick" class="ctl" aria-hidden="true"><span class="base"></span><span class="run">Run</span><span class="knob"></span></div>
+    <button id="jump" class="ctl btn" aria-label="Jump"><svg viewBox="0 0 24 24"><path d="M12 17V5M6 11l6-6 6 6M7 21h10" /></svg>Jump</button>
+    <button id="fly" class="ctl btn" aria-label="Fly or land"><svg class="air" viewBox="0 0 24 24"><path d="M3 11.5 21 4l-7.5 18-3-7.5z" /></svg><svg class="land" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg><span class="air">Fly</span><span class="land">Land</span></button>
+    <button id="rise" class="ctl btn" aria-label="Up"><svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6" /></svg>Up</button>
+    <button id="sink" class="ctl btn" aria-label="Down"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" /></svg>Down</button>
+    <div id="coach" class="ctl">Left thumb to walk · right thumb to look</div>
     <a id="more" class="hud" href="https://tours.insidewalk.app/" target="_blank" rel="noopener">
       <span class="kicker">More from InsideWalk</span>
       <span class="thumbs">

@@ -7,6 +7,7 @@ import { type Look, outdoors, picture, reflectedSky } from './engine/look'
 import { initTextures, mapsLoaded, startTextures } from './engine/textures'
 import { cityReflections } from './engine/reflections'
 import { minimap } from './minimap'
+import { touchControls, touchOnly } from './touch'
 import { walker } from './walk'
 
 /** A late summer afternoon over Lower Manhattan: the sun in the south-west, warm haze, a few high clouds. */
@@ -89,6 +90,10 @@ async function main() {
   const reflections = cityReflections(renderer, scene)
   setReflections(reflections)
   const walk = walker(renderer.domElement, tiles, { x: sx, z: sz, heading: (-bearing * Math.PI) / 180, pitch: (pitch * Math.PI) / 180, height })
+  if (touchOnly()) {
+    touchControls(renderer.domElement, walk.pad)
+    walk.pad.onFly?.(walk.flying())
+  }
   // Only the blocks round the walker and in view before the first frame; the rest of the city streams in as they look.
   await tiles.warm(walk.camera, (step, done) =>
     step === 'load' ? progress('Fetching the streets round you', 0.08 + done * 0.22) : progress('Raising the buildings', 0.3 + done * 0.3),
@@ -173,6 +178,13 @@ async function main() {
       pipeline.render()
       reflections.capture(new THREE.Vector3(...eye))
       while (reflections.step(1));
+    },
+    /** The walker moved `dt` seconds by its controls, the map and the street's name with it (scripts/touch-film.mjs). */
+    step(dt: number) {
+      walk.update(dt)
+      const eye = camera.position
+      map.draw(eye.x, eye.z, camera.rotation.y)
+      place.textContent = `${streetLabel(tiles.streetsAt(eye.x, eye.z), eye.x, eye.z)}${walk.flying() ? ' · flying' : ''}`
     },
     async frame() {
       await tiles.settle(camera)

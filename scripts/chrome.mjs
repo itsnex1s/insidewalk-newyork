@@ -8,11 +8,11 @@ const CHROME = process.env.CHROME ?? '/Applications/Google Chrome.app/Contents/M
 export const wait = (ms) => new Promise((r) => setTimeout(r, ms))
 
 /**
- * Opens `url` in a fresh headless Chrome of `width` × `height` CSS pixels at `scale` device pixels each, and waits for
- * the walk to report ready (body[data-ready]). `send` speaks the protocol; `evaluate` awaits an expression's value on
- * the page; `close` quits Chrome and removes its profile.
+ * Opens `url` in a fresh headless Chrome of `width` × `height` CSS pixels at `scale` device pixels each (a phone's
+ * touch screen with `touch`), and waits for the walk to report ready (body[data-ready]). `send` speaks the protocol;
+ * `evaluate` awaits an expression's value on the page; `close` quits Chrome and removes its profile.
  */
-export async function openPage(url, { width, height, scale = 1 }) {
+export async function openPage(url, { width, height, scale = 1, touch = false }) {
   const profile = mkdtempSync(join(tmpdir(), 'city-chrome-'))
   const port = 9300 + Math.floor(Math.random() * 500)
   const chrome = spawn(CHROME, ['--headless=new', '--enable-unsafe-webgpu', '--hide-scrollbars', '--no-first-run', '--disable-component-update', '--disable-background-networking', `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, `--window-size=${width},${height}`, 'about:blank'], { stdio: 'ignore' })
@@ -53,7 +53,8 @@ export async function openPage(url, { width, height, scale = 1 }) {
       return result.value
     }
     await send('Runtime.enable')
-    await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: scale, mobile: false })
+    await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: scale, mobile: touch })
+    if (touch) await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 })
     const t0 = Date.now()
     await send('Page.navigate', { url })
     const ok = await evaluate(`new Promise((res) => { const t0 = Date.now(); const p = () => document.body.hasAttribute('data-ready') ? res(true) : Date.now() - t0 > 180000 ? res(false) : setTimeout(p, 200); p() })`)

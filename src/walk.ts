@@ -8,8 +8,8 @@ import { PROPS } from './engine/util'
  * and look as in a game, WASD or the arrows to walk, Shift to hurry. The walker is a circle 30 cm across its middle on
  * the plan and slides along the walls it meets; the eye rises a kerb's height onto a sidewalk and steps down off it, and
  * Space jumps. E rises into the air and Q comes down (no walls up there), back to walking on reaching the ground; F
- * takes off or lands at once. On a touch screen the left half of the screen walks as a stick, the right half looks,
- * and a double tap there jumps.
+ * takes off or lands at once. A touch screen drives the same walker through its `pad` (touch.ts): a stick, a look
+ * and buttons, as a phone game has them.
  */
 
 const EYE = 1.65
@@ -30,6 +30,24 @@ export interface Walker {
   /** Moves the walker by `dt` seconds of input; true when the view changed. */
   update(dt: number): boolean
   flying(): boolean
+  pad: Pad
+}
+
+/** The on-screen controls' hold on the walker (touch.ts). */
+export interface Pad {
+  /** The stick, -1 to 1 each way (its length the share of the speed), and whether it is pushed past its rim to run. */
+  forward: number
+  right: number
+  run: boolean
+  /** Held up (1) or down (-1): rising takes off, as E does. */
+  up: number
+  /** Turns the view by a drag of (dx, dy) pixels: right turns right, up looks up. */
+  turn(dx: number, dy: number): void
+  jump(): void
+  /** Takes off or lands, as F does. */
+  fly(): void
+  /** Told whenever the walker takes off or lands. */
+  onFly?: (flying: boolean) => void
 }
 
 /** What the walker asks of the city round them (the streamed tiles, city/tiles.ts). */
@@ -50,9 +68,6 @@ export function walker(canvas: HTMLCanvasElement, world: World, start: { x: numb
   // mouse's coarse steps and an uneven frame come out as a smooth turn.
   let [aimYaw, aimPitch] = [yaw, pitch]
   const keys = new Set<string>()
-  const stick = { id: -1, x: 0, y: 0, dx: 0, dy: 0 }
-  const look = { id: -1, x: 0, y: 0 }
-  let lastTap = -Infinity
   let dirty = true
   /** Height of a jump above the ground, and its speed up. */
   let air = 0
@@ -67,13 +82,20 @@ export function walker(canvas: HTMLCanvasElement, world: World, start: { x: numb
     return world.onSidewalk(x, z) ? KERB : 0
   }
 
+  const setFly = (on: boolean) => {
+    if (on === fly) return
+    fly = on
+    pad.onFly?.(fly)
+  }
+  const toggleFly = () => {
+    setFly(!fly)
+    if (!fly) at.y = groundAt(at.x, at.z) + EYE
+    else at.y = Math.max(at.y, groundAt(at.x, at.z) + EYE + 30)
+    dirty = true
+  }
+
   addEventListener('keydown', (e) => {
-    if (e.code === 'KeyF') {
-      fly = !fly
-      if (!fly) at.y = groundAt(at.x, at.z) + EYE
-      else at.y = Math.max(at.y, groundAt(at.x, at.z) + EYE + 30)
-      dirty = true
-    }
+    if (e.code === 'KeyF') toggleFly()
     if (e.code === 'Space') {
       // Not the page scrolling, nor a focused link following.
       e.preventDefault()
@@ -105,28 +127,7 @@ export function walker(canvas: HTMLCanvasElement, world: World, start: { x: numb
       turn(-e.movementX, -e.movementY)
     }
   })
-  canvas.addEventListener('pointerdown', (e) => {
-    if (e.pointerType === 'mouse') return
-    if (e.clientX < innerWidth / 2 && stick.id < 0) Object.assign(stick, { id: e.pointerId, x: e.clientX, y: e.clientY, dx: 0, dy: 0 })
-    else if (look.id < 0) {
-      if (e.timeStamp - lastTap < 300) jump()
-      lastTap = e.timeStamp
-      Object.assign(look, { id: e.pointerId, x: e.clientX, y: e.clientY })
-    }
-  })
-  canvas.addEventListener('pointermove', (e) => {
-    if (e.pointerId === stick.id) Object.assign(stick, { dx: (e.clientX - stick.x) / 60, dy: (e.clientY - stick.y) / 60 })
-    if (e.pointerId === look.id) {
-      turn(-(e.clientX - look.x) * 1.6, -(e.clientY - look.y) * 1.6)
-      Object.assign(look, { x: e.clientX, y: e.clientY })
-    }
-  })
-  const lift = (e: PointerEvent) => {
-    if (e.pointerId === stick.id) Object.assign(stick, { id: -1, dx: 0, dy: 0 })
-    if (e.pointerId === look.id) look.id = -1
-  }
-  canvas.addEventListener('pointerup', lift)
-  canvas.addEventListener('pointercancel', lift)
+  const pad: Pad = { forward: 0, right: 0, run: false, up: 0, turn, jump, fly: toggleFly }
 
   /** Pushes (x, z) out of every wall within the walker's radius. */
   function collide(p: THREE.Vector3) {
@@ -146,17 +147,18 @@ export function walker(canvas: HTMLCanvasElement, world: World, start: { x: numb
 
   function update(dt: number) {
     const k = (code: string) => (keys.has(code) ? 1 : 0)
-    const forward = k('KeyW') + k('ArrowUp') - k('KeyS') - k('ArrowDown') - stick.dy
-    const right = k('KeyD') + k('ArrowRight') - k('KeyA') - k('ArrowLeft') + stick.dx
-    const up = k('KeyE') + k('PageUp') - k('KeyQ') - k('PageDown')
+    const forward = k('KeyW') + k('ArrowUp') - k('KeyS') - k('ArrowDown') + pad.forward
+    const right = k('KeyD') + k('ArrowRight') - k('KeyA') - k('ArrowLeft') + pad.right
+    const up = THREE.MathUtils.clamp(k('KeyE') + k('PageUp') - k('KeyQ') - k('PageDown') + pad.up, -1, 1)
+    const hurry = keys.has('ShiftLeft') || keys.has('ShiftRight') || pad.run
     // Rising takes off; coming down to the ground lands.
     if (up > 0 && !fly) {
-      fly = true
+      setFly(true)
       air = rise = 0
     }
     const moving = forward || right || (fly && up)
     if (moving) {
-      const speed = fly ? FLY * (keys.has('ShiftLeft') ? 4 : 1) : keys.has('ShiftLeft') || keys.has('ShiftRight') ? HURRY : SPEED
+      const speed = fly ? FLY * (hurry ? 4 : 1) : hurry ? HURRY : SPEED
       const len = Math.min(1, Math.hypot(forward, right)) / (Math.hypot(forward, right) || 1)
       const [sin, cos] = [Math.sin(yaw), Math.cos(yaw)]
       const step = speed * dt * len
@@ -168,7 +170,7 @@ export function walker(canvas: HTMLCanvasElement, world: World, start: { x: numb
         next.y += up * Math.max(speed, 6) * dt
         if (next.y <= ground) {
           next.y = ground
-          fly = false
+          setFly(false)
         }
       } else collide(next)
       at.copy(next)
@@ -208,5 +210,5 @@ export function walker(canvas: HTMLCanvasElement, world: World, start: { x: numb
     return changed
   }
 
-  return { camera, update, flying: () => fly }
+  return { camera, update, flying: () => fly, pad }
 }

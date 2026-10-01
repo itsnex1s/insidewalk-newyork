@@ -45,12 +45,14 @@ There are no hand-made models. Facades, cornices, fire escapes, storefronts, wat
 
 | | Keyboard and mouse | Touch |
 |---|---|---|
-| Look | Drag, or click to lock the mouse | Drag on the right half of the screen |
-| Walk | <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> or the arrow keys | Left half of the screen works as a stick |
-| Hurry | Hold <kbd>Shift</kbd> | |
-| Jump | <kbd>Space</kbd> | Double tap |
-| Up / down | <kbd>E</kbd> / <kbd>Q</kbd> (or <kbd>PgUp</kbd> / <kbd>PgDn</kbd>) | |
-| Fly or land | <kbd>F</kbd> | |
+| Look | Drag, or click to lock the mouse | Drag with the right thumb |
+| Walk | <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> or the arrow keys | Stick under the left thumb, wherever it lands |
+| Hurry | Hold <kbd>Shift</kbd> | Push the stick past its rim |
+| Jump | <kbd>Space</kbd> | **Jump** button |
+| Up / down | <kbd>E</kbd> / <kbd>Q</kbd> (or <kbd>PgUp</kbd> / <kbd>PgDn</kbd>) | Hold **Up** / **Down** while flying |
+| Fly or land | <kbd>F</kbd> | **Fly** / **Land** button |
+
+On a touch-only phone or tablet the controls work like a mobile game: a floating stick on the left, look on the right and buttons by the right thumb.
 
 You can link to a particular spot with `?at=x,z,bearing[,pitch,height]`. The values are metres from Prince and Greene (x east, z south) and degrees, for example [`?at=0,200,200,-12,260`](https://newyork.insidewalk.app/?at=0,200,200,-12,260).
 
@@ -115,6 +117,7 @@ Other scripts:
 | `npm run posters` | Re-renders the loading screen still, its blurred placeholder and the social card from the walk itself (needs the dev server, `cwebp` and ImageMagick) |
 | `node scripts/still.mjs "<query>" out.png` | Saves a frame from headless Chrome. `--profile <ms>` lists the costliest functions |
 | `node scripts/film.mjs` | Films the shots in `scripts/film.json` frame by frame in 4K, with motion blur and crossfades, into `film/` (needs the dev server and ffmpeg). `--board` first draws a storyboard of each shot's first, middle and last frame |
+| `node scripts/touch-film.mjs` | Records the touch controls as if on an iPad Pro 13", driven by scripted fingers, into `film/touch-ipad.mp4` (needs the dev server and ffmpeg). `--board` draws a frame a second first |
 
 **Deploying.** The site is static files served by Cloudflare Workers (`wrangler.jsonc`). Any static host works, because `dist/` is all there is.
 

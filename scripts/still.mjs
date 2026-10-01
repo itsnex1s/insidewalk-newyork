@@ -5,6 +5,7 @@
 //   e.g. "at=0.5,-6,29" (x, z, bearing, pitch, height: see main.ts), "at=0,0,29,-35,250&rich"
 //   --profile <ms> prints the main thread's costliest functions over that long after ready.
 //   --during <expression> is started (not awaited) as the profile begins.
+//   --touch draws it as a phone's touch screen (the on-screen stick and buttons).
 //   --eval "<expression>" prints what it evaluates to on the page once it is ready (window.city has the scene).
 import { writeFileSync } from 'node:fs'
 import { openPage, wait } from './chrome.mjs'
@@ -17,7 +18,7 @@ if (!out) {
   console.error('usage: still.mjs "<query>" <out.png>')
   process.exit(1)
 }
-const { send, close } = await openPage(`${base}/?${query}`, { width, height })
+const { send, close } = await openPage(`${base}/?${query}`, { width, height, touch: process.argv.includes('--touch') })
 try {
   const profileFor = Number(opt('--profile', 0))
   if (profileFor) {
