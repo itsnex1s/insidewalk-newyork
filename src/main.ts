@@ -67,7 +67,8 @@ const REBAKE = 300
 async function main() {
   progress('Starting the renderer', 0.05)
   const renderer = new THREE.WebGPURenderer({ antialias: false, powerPreference: 'high-performance' })
-  renderer.setPixelRatio(Math.min(devicePixelRatio, params.has('sharp') ? 2 : 1.5))
+  // ?ratio=3 draws three pixels to each CSS pixel whatever the screen: scripts/film.mjs supersamples so.
+  renderer.setPixelRatio(Number(params.get('ratio')) || Math.min(devicePixelRatio, params.has('sharp') ? 2 : 1.5))
   renderer.setSize(box.clientWidth, box.clientHeight)
   box.appendChild(renderer.domElement)
   const [index] = await Promise.all([loadIndex(), renderer.init()])
@@ -150,7 +151,41 @@ async function main() {
   let mapAt = 0
   let stillFor = 0
   let settleAt = 0
-  const dev = { scene, camera: walk.camera, renderer, frames: 0, timings, streamer: tiles, tiles: () => tiles.counts(), redraw: () => (redraw = 2) }
+  // Filming (scripts/film.mjs): the walk's loop stopped, and each frame drawn once the camera is set and all it sees is in.
+  const camera = walk.camera
+  const film = {
+    stop: () => renderer.setAnimationLoop(null),
+    pose(x: number, y: number, z: number, yaw: number, pitch: number, fov: number) {
+      camera.position.set(x, y, z)
+      camera.rotation.set(pitch, yaw, 0, 'YXZ')
+      camera.fov = fov
+      camera.near = THREE.MathUtils.clamp(y * 0.012, 0.2, 4)
+      camera.updateProjectionMatrix()
+      camera.updateMatrixWorld()
+    },
+    /** Readies a shot: the city round its first pose in, the sky's light baked round (x, z), the reflections from `eye`. */
+    async shot(x: number, z: number, eye: [number, number, number]) {
+      await tiles.settle(camera)
+      bake(x, z)
+      baked.set(x, z)
+      follow(camera.position)
+      reshadow()
+      pipeline.render()
+      reflections.capture(new THREE.Vector3(...eye))
+      while (reflections.step(1));
+    },
+    async frame() {
+      await tiles.settle(camera)
+      if (tiles.changed) {
+        tiles.changed = false
+        reshadow()
+      }
+      follow(camera.position)
+      pipeline.render()
+      await (renderer.backend as unknown as { device: { queue: { onSubmittedWorkDone(): Promise<void> } } }).device.queue.onSubmittedWorkDone()
+    },
+  }
+  const dev = { scene, camera, renderer, frames: 0, timings, streamer: tiles, tiles: () => tiles.counts(), redraw: () => (redraw = 2), film }
   Object.assign(window, { city: dev })
   renderer.setAnimationLoop((now) => {
     const dt = Math.min(0.1, (now - last) / 1000)

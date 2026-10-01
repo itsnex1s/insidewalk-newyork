@@ -274,6 +274,21 @@ export class Tiles {
     return this.tiles.filter((t) => t.data && Math.abs(t.x - x) < reach && Math.abs(t.z - z) < reach).flatMap((t) => t.data!.streets)
   }
 
+  /**
+   * Builds at once everything `camera` wants, fetching what it must, and resolves once it all shows: for filming
+   * (scripts/film.mjs), where a frame waits for the city rather than the city for the frame.
+   */
+  async settle(camera: THREE.Camera) {
+    for (let round = 0; round < 20; round++) {
+      this.look(camera)
+      const todo = this.tiles.filter((tile) => this.wanted(tile) !== tile.level)
+      if (!todo.length && !this.tiles.some((tile) => tile.pending)) return
+      await Promise.all(todo.filter((tile) => !tile.data).map((tile) => this.fetch(tile, Infinity)))
+      this.update(camera, Infinity)
+      await this.queue
+    }
+  }
+
   /** The tiles whose data is in within `reach` metres of (x, z) (as squares), for the minimap: built or not. */
   dataAround(x: number, z: number, reach: number) {
     const r = reach + this.index.tile / 2

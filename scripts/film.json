@@ -1,0 +1,19 @@
+{
+  "output": "film/lower-manhattan.mp4",
+  "width": 1920,
+  "height": 1080,
+  "scale": 3,
+  "outWidth": 3840,
+  "outHeight": 2160,
+  "fps": 60,
+  "outFps": 30,
+  "fade": 0.6,
+  "shots": [
+    { "name": "greene", "note": "Greene Street, SoHo's cast iron, up the middle of the street", "seconds": 6, "path": [ [55, 97], [71, 72] ], "height": [2.2, 2.6], "pitch": [2, 4], "pan": [8, -4] },
+    { "name": "crosby", "note": "Crosby Street's setts, the cast iron fronts passing on the right", "seconds": 6, "path": [ [178, 345], [194, 320] ], "height": [1.5, 1.7], "pitch": [1, 2], "pan": [30, 18] },
+    { "name": "perry", "note": "Perry Street, the West Village under its trees", "seconds": 6, "path": [ [-200, -1197], [-170, -1203] ], "height": 1.9, "pitch": [1, 2] },
+    { "name": "commerce", "note": "Commerce Street, row houses and trees", "seconds": 6, "path": [ [-318, -762], [-345, -751] ], "height": 2, "pitch": [1, 2] },
+    { "name": "wall", "note": "Wall Street, looking up the towers", "seconds": 6, "path": [ [-600, 2126], [-626, 2108] ], "height": [1.8, 5], "pitch": [16, 24], "fov": 58 },
+    { "name": "rise", "note": "up out of Greene Street over SoHo to the skyline, the title", "seconds": 8, "path": [ [46, 111], [0, 183] ], "bearing": 210, "height": [3, 200], "pitch": [0, -14], "ease": 0.9, "title": 4 }
+  ]
+}

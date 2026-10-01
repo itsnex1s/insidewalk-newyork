@@ -1,13 +1,13 @@
 <div align="center">
 
-<img src="docs/hero.jpg" alt="Lower Manhattan in 3D, looking south over SoHo to the Financial District" width="100%" />
+<a href="https://github.com/itsnex1s/insidewalk-newyork/releases/download/film-v1/lower-manhattan-1080p.mp4"><img src="docs/walk.webp" alt="Walking Perry Street under its trees, then rising out of SoHo to the skyline of the Financial District" width="100%" /></a>
 
 # Lower Manhattan in 3D
 
 **Walk the streets of Lower Manhattan in your browser, from 14th Street down to the Battery.**<br />
 Every building, sidewalk, roadbed and street tree comes from New York City's open data, and the city streams in around you as you walk.
 
-[**▶ Walk it now: newyork.insidewalk.app**](https://newyork.insidewalk.app)
+[**▶ Walk it now: newyork.insidewalk.app**](https://newyork.insidewalk.app) &nbsp;·&nbsp; [**Watch the film**](https://github.com/itsnex1s/insidewalk-newyork/releases/download/film-v1/lower-manhattan-1080p.mp4) <sub>(1080p, 35 s · [4K](https://github.com/itsnex1s/insidewalk-newyork/releases/download/film-v1/lower-manhattan.mp4))</sub>
 
 [![Live demo](https://img.shields.io/badge/demo-newyork.insidewalk.app-e8875c?style=flat-square)](https://newyork.insidewalk.app)
 [![License: MIT](https://img.shields.io/badge/license-MIT-2b2f34?style=flat-square)](LICENSE)
@@ -114,6 +114,7 @@ Other scripts:
 | `npm run build` | Type-checks and builds to `dist/` |
 | `npm run posters` | Re-renders the loading screen still, its blurred placeholder and the social card from the walk itself (needs the dev server, `cwebp` and ImageMagick) |
 | `node scripts/still.mjs "<query>" out.png` | Saves a frame from headless Chrome. `--profile <ms>` lists the costliest functions |
+| `node scripts/film.mjs` | Films the shots in `scripts/film.json` frame by frame in 4K, with motion blur and crossfades, into `film/` (needs the dev server and ffmpeg). `--board` first draws a storyboard of each shot's first, middle and last frame |
 
 **Deploying.** The site is static files served by Cloudflare Workers (`wrangler.jsonc`). Any static host works, because `dist/` is all there is.
 
