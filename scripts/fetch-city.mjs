@@ -8,7 +8,7 @@
  *              condominium by the lot's point inside the footprint: building class, year built, floors, historic district
  *   sidewalks  NYC Planimetric Database: Sidewalk (52n9-sdep)
  *   roadbeds   NYC Planimetric Database: Roadbed (i36f-5ih7); those an OSM way paved in setts runs through are setts
- *   trees      2015 Street Tree Census (uvpi-gqnh), the living ones
+ *   trees      2015 Street Tree Census (uvpi-gqnh), the living ones, moved onto the sidewalk by the kerb
  *   lamps      placed along every kerb here, as the tiles do not see their neighbours' streets
  *   streets    OSM street centrelines with their names, for the "where am I" label
  *
@@ -16,7 +16,7 @@
  * its rings wound so that the client can tell a wall's outward side from the order of its corners (geo.mjs, wound).
  */
 import { mkdir, rm, writeFile } from 'node:fs/promises'
-import { bounds, inPolygon, inRing, lamps, polygonIndex, wound } from './geo.mjs'
+import { bounds, inPolygon, inRing, lamps, polygonIndex, treePits, wound } from './geo.mjs'
 
 const BOX = { south: 40.7, north: 40.741, west: -74.021, east: -73.971 }
 const ORIGIN = { lat: 40.72475, lon: -74.00095 }
@@ -197,9 +197,17 @@ for (const p of roadbeds) {
   const tile = tileOf(...centre(p[0]))
   ;(cobbled(p) ? tile.setts : tile.roads).push(p)
 }
+// Each tree onto the sidewalk by the kerb, in a pit turned along it (geo.mjs, treePits): x, z, girth, species, turn.
+const pitFor = treePits(sidewalks, roadbeds)
+let dropped = 0
 for (const t of treeRows) {
-  const [x, z] = project([Number(t.longitude), Number(t.latitude)])
-  tileOf(x, z).trees.push([x, z, Number(t.tree_dbh) || 4, t.spc_common ?? ''])
+  const pit = pitFor(...project([Number(t.longitude), Number(t.latitude)]))
+  if (!pit) {
+    dropped++
+    continue
+  }
+  const [x, z, turn] = pit
+  tileOf(x, z).trees.push([x, z, Number(t.tree_dbh) || 4, t.spc_common ?? '', turn])
 }
 for (const lamp of lamps(sidewalks, onRoad)) tileOf(lamp[0], lamp[1]).lamps.push(lamp)
 // A street's line goes to every tile one of its segments starts in, so the label finds it wherever the walker stands.
@@ -226,4 +234,4 @@ for (const t of tiles.values()) {
   bytes += json.length
 }
 await writeFile(new URL('index.json', OUT), JSON.stringify(index))
-console.log(`${id} buildings (${hist} in the SoHo historic district), ${sidewalks.length} sidewalks, ${roadbeds.length} roadbeds, ${treeRows.length} trees, ${index.tiles.length} tiles, ${(bytes / 1e6).toFixed(1)} MB`)
+console.log(`${id} buildings (${hist} in the SoHo historic district), ${sidewalks.length} sidewalks, ${roadbeds.length} roadbeds, ${treeRows.length - dropped} trees (${dropped} in the roadway left out), ${index.tiles.length} tiles, ${(bytes / 1e6).toFixed(1)} MB`)

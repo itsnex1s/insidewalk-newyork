@@ -23,7 +23,8 @@ const LEAVES = [0x4d6b2a, 0x5a7830, 0x46652a, 0x668436, 0x70893a, 0x587a2e, 0x7d
 const kindOf = (name: string) =>
   /plane/i.test(name) ? 'plane' : /locust/i.test(name) ? 'locust' : /pear/i.test(name) ? 'pear' : /ginkgo/i.test(name) ? 'ginkgo' : 'broad'
 
-const pit = memo(() => new THREE.BoxGeometry(1.4, 0.04, 1.4).translate(0, 0.02, 0))
+/** A tree pit, its long side along the kerb (x), as New York's are. */
+const pit = memo(() => new THREE.BoxGeometry(1.9, 0.04, 1.3).translate(0, 0.02, 0))
 const earth = memo(() => new THREE.MeshStandardNodeMaterial({ color: 0x3b3128, roughness: 1 }))
 
 /** A tile's street trees; `near` with full crowns of their kinds, far off with sparser plane crowns. Each kind keeps one crown shape everywhere, so tiles merge. */
@@ -42,7 +43,7 @@ export function trees(list: TileData['trees'], near: boolean) {
     const form = names.indexOf(kind) + 3
     group.add(grove({ kinds: [KINDS[kind]], leaves: LEAVES }, points, Math.round(points[0].x * 7 + points[0].z), near, form, near))
   }
-  if (near) group.add(instances(pit(), earth(), list.map(([x, z]) => ({ x, z, y: KERB - 0.03 })), false))
+  if (near) group.add(instances(pit(), earth(), list.map(([x, z, , , turn]) => ({ x, z, y: KERB - 0.03, turn })), false))
   return prop(group)
 }
 

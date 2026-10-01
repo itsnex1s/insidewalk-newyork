@@ -28,8 +28,8 @@ export interface TileData {
   /** Asphalt roadbeds, and those paved in Belgian block. */
   roads: Polygon[]
   setts: Polygon[]
-  /** x, z, trunk diameter at breast height (inches), species. */
-  trees: [number, number, number, string][]
+  /** x, z, trunk diameter at breast height (inches), species, and the pit's turn along the kerb (scripts/geo.mjs, treePits). */
+  trees: [number, number, number, string, number][]
   /** x, z, turn of the arm towards the road. */
   lamps: [number, number, number][]
   streets: { name: string; line: number[] }[]

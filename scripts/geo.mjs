@@ -106,3 +106,73 @@ export function lamps(sidewalks, onRoad) {
   }
   return out
 }
+
+/**
+ * Where each street tree's pit goes. The census places a tree a few metres off where it stands: a seventh of Lower
+ * Manhattan's in the roadway, the rest at any distance from the kerb, so a row of them wanders. A tree within `reach`
+ * metres of a kerb (a roadbed's edge with a sidewalk beside it; 12 m from the roadway, 5 m from the sidewalk) goes onto
+ * the sidewalk, `inset` metres in from the nearest kerb, turned along it, and a row lines up as the pits do; one further
+ * from any kerb (a park, a plaza) stays where it is, turned with the grid round it; one in the roadway with no
+ * sidewalk near is left out (null). Returns [x, z, turn], turn as instances() takes it: the pit's x along the kerb.
+ */
+export function treePits(sidewalks, roadbeds, inset = 1) {
+  const onSidewalk = polygonIndex(sidewalks)
+  const onRoad = polygonIndex(roadbeds)
+  const size = 20
+  const cells = new Map()
+  for (const polygon of roadbeds) {
+    for (const ring of polygon) {
+      for (let i = 0; i < ring.length; i += 2) {
+        const j = (i + 2) % ring.length
+        const edge = [ring[i], ring[i + 1], ring[j], ring[j + 1]]
+        for (let a = Math.floor(Math.min(edge[0], edge[2]) / size); a <= Math.floor(Math.max(edge[0], edge[2]) / size); a++) {
+          for (let b = Math.floor(Math.min(edge[1], edge[3]) / size); b <= Math.floor(Math.max(edge[1], edge[3]) / size); b++) {
+            const k = `${a},${b}`
+            if (!cells.has(k)) cells.set(k, [])
+            cells.get(k).push(edge)
+          }
+        }
+      }
+    }
+  }
+  const round = (v) => Math.round(v * 100) / 100
+  return (x, z) => {
+    const inRoad = onRoad(x, z)
+    const reach = inRoad ? 12 : 5
+    const near = []
+    const seen = new Set()
+    const n = Math.ceil(reach / size)
+    for (let a = Math.floor(x / size) - n; a <= Math.floor(x / size) + n; a++) {
+      for (let b = Math.floor(z / size) - n; b <= Math.floor(z / size) + n; b++) {
+        for (const e of cells.get(`${a},${b}`) ?? []) {
+          if (seen.has(e)) continue
+          seen.add(e)
+          const [ax, az, bx, bz] = e
+          const [dx, dz] = [bx - ax, bz - az]
+          const len = Math.hypot(dx, dz)
+          if (len < 0.5) continue
+          const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (len * len)))
+          const [qx, qz] = [ax + dx * t, az + dz * t]
+          const d = Math.hypot(x - qx, z - qz)
+          if (d < reach) near.push({ d, qx, qz, ux: dx / len, uz: dz / len })
+        }
+      }
+    }
+    near.sort((p, q) => p.d - q.d)
+    // The nearest edge that is a kerb: the roadway on one side, a sidewalk `inset` in on the other (a seam between two
+    // roadbeds has the roadway on both).
+    for (const { qx, qz, ux, uz } of near.slice(0, 8)) {
+      for (const s of [1, -1]) {
+        const [nx, nz] = [-uz * s, ux * s]
+        if (onRoad(qx + nx * 0.3, qz + nz * 0.3)) continue
+        for (const k of [inset, inset * 0.65, inset * 0.4]) {
+          const [px, pz] = [qx + nx * k, qz + nz * k]
+          if (onSidewalk(px, pz)) return [round(px), round(pz), Math.round(Math.atan2(-uz, ux) * 1000) / 1000]
+        }
+      }
+    }
+    if (inRoad) return null
+    // Turned with the street grid (29° east of north here), as the paving round it is.
+    return [round(x), round(z), -0.506]
+  }
+}
