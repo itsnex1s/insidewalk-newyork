@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu'
 import { attribute, bumpMap, color, float, floor, fract, hash, mix, mx_noise_float, positionWorld, select, smoothstep, sqrt, step, vec3 } from 'three/tsl'
-import { above, either, stripe } from '../engine/filter'
+import { above, either, footprint, stripe } from '../engine/filter'
+import { afterDark, lightsOn, litByLamps } from '../engine/night'
 import { memo } from '../engine/util'
 import type { Reflections } from '../engine/reflections'
 import type { Style } from './styles'
@@ -13,7 +14,8 @@ import type { Style } from './styles'
  *   storey  shop floor height, storey height, a seed in 0..1 (+2 for arched heads), the top of the windows
  *   paint, trim, back   the front's colour, the frames' and lintels', the back walls' brick
  * A front has a shop floor of storefronts between piers under a sign band, and storeys of windows above in its style;
- * a back or party wall is brick, blank or with a few small windows.
+ * a back or party wall is brick, blank or with a few small windows. After dark the windows light one by one as the
+ * city's lights come on (night.ts's lightsOn), most of the shops, and the street lights' pools light the walls' feet.
  */
 
 type F = THREE.Node<'float'>
@@ -94,6 +96,25 @@ function glass(k: F, k2: F, sill: F | number, head: F, bright = 0) {
   return { color: bright ? mix(inside, color(0x7a6d5f), k2.mul(bright)) : inside, blind }
 }
 
+/**
+ * A room's light seen through its window after dark, once `share` of the windows are lit: most a lamp's warm light,
+ * some a cool white, each its own brightness, brighter towards the ceiling (from `sill` to `head`); a drawn blind glows.
+ */
+function roomLight(k: F, share: F, sill: F | number, head: F, blind: F | number) {
+  const on = step(k, share)
+  const tone = mix(color(0xffa95e), color(0xc9dcff), step(0.86, hash(k.mul(97.1).add(2 ** 20))))
+  const level = hash(k.mul(311.7).add(2 ** 20)).mul(0.7).add(0.45)
+  const ceiling = smoothstep(typeof sill === 'number' ? float(sill) : sill, head, ly).mul(0.6).add(0.55)
+  return tone.mul(level).mul(ceiling).mul(mix(float(1), float(1.5), blind)).mul(on)
+}
+
+/** How many windows are lit, all told, when the city's lights are full on. */
+const LIT = 0.42
+/** A lit window's light, as radiance: a room's lamp seen from the street. */
+const ROOM = 0.32
+/** How much of the street lights' pools the walls take: they light the pavement under them, the walls only in passing. */
+const WALLS = 0.3
+
 /** A window between piers, `halfW` either side of the bay's middle, from `sill` up to its head (arched where the building's are). */
 function window_(halfW: F, sill: number, headDrop: number, frameW: number, sash: boolean) {
   const flatHead = floorH.sub(headDrop)
@@ -107,7 +128,8 @@ function window_(halfW: F, sill: number, headDrop: number, frameW: number, sash:
   // The reveal: the head and one jamb in shadow, as the window sits back in the wall.
   const reveal = float(1).sub(above(ly.sub(head.sub(0.14))).mul(0.45)).sub(above(lx.sub(halfW.sub(0.1))).mul(0.25))
   const glassy = pane.mul(float(1).sub(bars))
-  return { opening, glassy, glassColor: g.color.mul(reveal), blind: g.blind, head }
+  const lit = roomLight(h1(bayIndex.mul(29).add(floorIndex.mul(7)).add(3)), lightsOn.mul(LIT), sill, head, g.blind)
+  return { opening, glassy, glassColor: g.color.mul(reveal), blind: g.blind, head, lit: lit.mul(glassy) }
 }
 
 /**
@@ -145,7 +167,10 @@ function storefront(pier: V) {
   let c: V = mix(pier, frameColor, frame)
   c = mix(c, g.color, glassy)
   c = mix(c, sign, band)
-  return { color: c, glassy, relief: glassy.mul(-0.04), lit: interior.mul(glassy).mul(step(0.3, k)).mul(0.22) }
+  // After dark most shops are lit, in a warm light; by day a lit shop shows against the street's light.
+  const night = interior.mul(color(0xffcf9a)).mul(glassy).mul(step(0.18, k)).mul(lightsOn.mul(0.14))
+  const day = interior.mul(glassy).mul(step(0.3, k)).mul(lightsOn.mul(-0.8).add(1).mul(0.22))
+  return { color: c, glassy, relief: glassy.mul(-0.04), lit: day.add(afterDark(night)) }
 }
 
 /** A back or party wall: brick, painted over or patched grey here and there, a few small windows on some. */
@@ -158,7 +183,9 @@ function backWall() {
   const wy = fract(y.div(3.2)).mul(3.2)
   const opening = rect(wx, -0.42, 0.42).mul(rect(wy, 0.9, 2.3)).mul(windows).mul(above(y.sub(3))).mul(above(top.sub(y)))
   const c = mix(mix(b.color, tone, painted.mul(0.8)), color(0x22282c), opening)
-  return { color: c, glassy: opening, relief: b.relief.sub(opening.mul(0.05)) }
+  const room = h1(floor(u.div(2.4)).mul(3).add(floor(y.div(3.2)).mul(17)).add(41))
+  const lit = roomLight(room, lightsOn.mul(LIT * 0.7), 0.9, float(2.3), 0).mul(opening)
+  return { color: c, glassy: opening, relief: b.relief.sub(opening.mul(0.05)), lit }
 }
 
 /** The upper storeys of a front in `style`. */
@@ -168,7 +195,9 @@ function upperFront(style: Style) {
     const panel = u.div(bay.max(0.01))
     const solid = either(stripe(level2, 0, 0.28), stripe(panel, 0, 0.05))
     const pane = mix(color(0x2c3a44), color(0x52636e), cell.mul(0.5))
-    return { color: mix(pane, paint, solid), glassy: float(1).sub(solid), relief: solid.mul(0.03) }
+    // Offices and flats behind the curtain wall: a cool white, a pane here and there warm.
+    const lit = roomLight(h1(floor(panel).mul(13).add(floor(level2).mul(71)).add(5)), lightsOn.mul(LIT), 0, floorH, 0)
+    return { color: mix(pane, paint, solid), glassy: float(1).sub(solid), relief: solid.mul(0.03), lit: lit.mul(float(1).sub(solid)) }
   }
   const wallFace = style === 'brick' ? brick(paint) : style === 'stone' ? stone(paint) : { color: paint, relief: float(0) }
   const halfW = style === 'iron' ? bay.mul(0.5).sub(0.4) : style === 'stone' ? bay.mul(0.5).sub(0.55) : bay.mul(0.5).sub(0.52).min(0.5)
@@ -194,7 +223,7 @@ function upperFront(style: Style) {
   const unit = style === 'brick' ? step(0.9, cell2).mul(rect(lx, -0.3, 0.3)).mul(rect(ly, 0.95, 1.35)) : float(0)
   c = mix(c, w.glassColor, w.glassy)
   c = mix(c, color(0x9a9a96), unit)
-  return { color: c, glassy: w.glassy.mul(float(1).sub(w.blind)).mul(float(1).sub(unit)), relief: wallFace.relief.sub(w.opening.mul(0.06)) }
+  return { color: c, glassy: w.glassy.mul(float(1).sub(w.blind)).mul(float(1).sub(unit)), relief: wallFace.relief.sub(w.opening.mul(0.06)), lit: w.lit.mul(float(1).sub(unit)) }
 }
 
 export const facade = memo(function facade(style: Style) {
@@ -220,9 +249,10 @@ export const facade = memo(function facade(style: Style) {
   m.roughnessNode = mix(float(style === 'iron' ? 0.55 : 0.85), mix(float(0.06), float(0.16), shop), glassy)
   // With the city reflected, the glass takes less of the sky from the environment (it would show the sky twice).
   m.metalnessNode = mix(float(0), mix(float(r ? 0.2 : 0.55), float(0.04), shop.mul(isFront)), glassy)
-  m.emissiveNode = r ? sf.lit.mul(shop).mul(isFront).add(r.color.mul(mirrored)) : sf.lit.mul(shop).mul(isFront)
+  const rooms = afterDark(mix(back.lit, up.lit.mul(upper).mul(hasBays), isFront).mul(ROOM))
+  m.emissiveNode = (r ? sf.lit.mul(shop).mul(isFront).add(r.color.mul(mirrored)) : sf.lit.mul(shop).mul(isFront)).add(rooms)
   m.normalNode = bumpMap(mix(back.relief, frontRelief, isFront), float(1))
-  return m
+  return litByLamps(m, undefined, WALLS)
 })
 
 /** Tar and gravel roofs, a shade apart building by building. */
@@ -240,7 +270,7 @@ export const roof = memo(function roof() {
 export const trimMaterial = memo(function trimMaterial() {
   const m = new THREE.MeshStandardNodeMaterial({ roughness: 0.7 })
   m.colorNode = (attribute('paint', 'vec3') as unknown as V).mul(mx_noise_float(positionWorld.mul(0.8)).mul(0.06).add(0.95))
-  return m
+  return litByLamps(m, undefined, WALLS)
 })
 
 /** Fire escapes: black painted iron, and the railings' bars cut out of thin panels. */
@@ -267,5 +297,11 @@ export const farFacade = memo(function farFacade() {
   m.colorNode = mix(tone, pane, windows).mul(grime)
   m.roughnessNode = mix(float(0.85), float(0.15), windows)
   m.metalnessNode = mix(float(0), float(0.4), windows)
-  return m
+  // Lit windows window by window up close; where a pixel spans a few, their average, which does not shimmer.
+  const share = lightsOn.mul(LIT)
+  const room = h1(floor(u.div(span.max(0.5))).mul(29).add(floor(y.sub(ground).div(floorH)).mul(7)).add(3))
+  const one = smoothstep(0.7, 0.3, footprint(u.div(span.max(0.5))).max(footprint(y.div(floorH))))
+  const lit = mix(share.mul(0.75), step(room, share).mul(hash(room.mul(311.7).add(2 ** 20)).mul(0.7).add(0.45)), one)
+  m.emissiveNode = afterDark(color(0xffb06a).mul(lit).mul(windows).mul(ROOM))
+  return litByLamps(m, undefined, WALLS)
 })

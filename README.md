@@ -38,6 +38,7 @@ A walkable 3D model of Manhattan below 14th Street, built entirely from public d
 - **Run** with Shift, or **fly** over the rooftops and land anywhere.
 - Find your way with a **minimap** in the corner, styled after driving games, and a label naming the street you are on.
 - Watch the **reflections**: the city shows in the glass of the towers around you.
+- Change the **time of day**: the afternoon, the golden hour with the sun setting straight down the cross streets, or the night, when the windows light one by one and the street lights come on.
 
 There are no hand-made models. Facades, cornices, fire escapes, storefronts, water tanks, street lights and trees are all generated from each building's footprint, height, age and land-use class.
 
@@ -51,10 +52,11 @@ There are no hand-made models. Facades, cornices, fire escapes, storefronts, wat
 | Jump | <kbd>Space</kbd> | **Jump** button |
 | Up / down | <kbd>E</kbd> / <kbd>Q</kbd> (or <kbd>PgUp</kbd> / <kbd>PgDn</kbd>) | Hold **Up** / **Down** while flying |
 | Fly or land | <kbd>F</kbd> | **Fly** / **Land** button |
+| Time of day | <kbd>T</kbd>, or the Day / Sunset / Night switch | The switch under the street's name |
 
 On a touch-only phone or tablet the controls work like a mobile game: a floating stick on the left, look on the right and buttons by the right thumb.
 
-You can link to a particular spot with `?at=x,z,bearing[,pitch,height]`. The values are metres from Prince and Greene (x east, z south) and degrees, for example [`?at=0,200,200,-12,260`](https://newyork.insidewalk.app/?at=0,200,200,-12,260).
+You can link to a particular spot with `?at=x,z,bearing[,pitch,height]`. The values are metres from Prince and Greene (x east, z south) and degrees, for example [`?at=0,200,200,-12,260`](https://newyork.insidewalk.app/?at=0,200,200,-12,260). Add `&time=sunset` or `&time=night` (or an hour from 16.5 to 22, such as `&time=20.6` for the blue hour) to open at that time, for example [Prince Street at sunset](https://newyork.insidewalk.app/?at=100,-51,303,3&time=sunset).
 
 ## How it works
 
@@ -85,6 +87,7 @@ The script decides which walls face a street, so the client knows where storefro
 - Sky occlusion is baked into a height map, a few milliseconds per frame, so streets between towers come out darker than open plazas.
 - Reflections come from a cube capture of the city, drawn one face per frame whenever you stop.
 - A colour grade finishes the image.
+- The time of day (`src/daytime.ts`) is a few keyed looks, from the afternoon to the night, with every hour between interpolated: the sun, the sky, the haze, the exposure and the grade. After dark the windows light up in the facade shaders, each one by a hash. The street lights don't use real lights: their pools are drawn into a 1 m texture of the ground around the walker (`src/engine/night.ts`), which the streets and walls sample.
 
 **Performance tricks** worth stealing, all in `src/engine`:
 

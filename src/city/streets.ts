@@ -2,12 +2,14 @@ import * as THREE from 'three/webgpu'
 import { abs, cameraViewMatrix, color, float, floor, fract, hash, mix, mx_noise_float, normalize, positionWorld, smoothstep, vec2, vec3, vec4 } from 'three/tsl'
 import { footprint, stripe } from '../engine/filter'
 import { albedo, type PbrSet, roughness, tangentNormal } from '../engine/textures'
+import { litByLamps } from '../engine/night'
 import { memo } from '../engine/util'
 import type { CityIndex, Polygon, Ring, TileData } from './data'
 
 /**
  * The ground: asphalt roadbeds, the Belgian block of Greene, Wooster, Mercer and Crosby, concrete sidewalks of
  * five-foot flags raised a kerb's height on granite kerbs (NYC Planimetric Database), and under them all a plain apron.
+ * After dark the street lights' pools lie on them (night.ts).
  */
 
 /** Height of a kerb: sidewalks stand this far over the roadbed. */
@@ -35,7 +37,7 @@ export const asphalt = memo(function asphalt() {
   m.colorNode = tone.mul(albedo(ASPHALT, xz, 0.9))
   m.roughnessNode = roughness(ASPHALT, xz, 0.85)
   m.normalNode = groundNormal(ASPHALT, xz, 0.6)
-  return m
+  return litByLamps(m)
 })
 
 /** Belgian block: granite setts about 28 by 16 cm in courses across the street, each a grey or brown of its own, in dark joints. */
@@ -53,7 +55,7 @@ export const setts = memo(function setts() {
   m.colorNode = mix(color(0x2a2826), shade.mul(domed.mul(0.25).add(0.82)), face).mul(noise01(xz.div(9)).mul(0.15).add(0.9))
   m.roughnessNode = mix(0.95, 0.55, face.mul(domed))
   m.normalNode = groundNormal(PAVERS, xz.mul(3), 0.4)
-  return m
+  return litByLamps(m)
 })
 
 /** Sidewalk concrete in 1.52 m flags, a joint between each, flag by flag a shade apart and stained here and there. */
@@ -67,11 +69,11 @@ export const sidewalk = memo(function sidewalk() {
   m.colorNode = tone.mul(joint.mul(0.45).add(0.55)).mul(stain.oneMinus())
   m.roughnessNode = roughness(PAVERS, xz, 0.88)
   m.normalNode = groundNormal(ASPHALT, xz.mul(4), 0.12)
-  return m
+  return litByLamps(m)
 })
 
 /** Granite kerbs, a steel edge along the top. */
-export const kerb = memo(() => new THREE.MeshStandardNodeMaterial({ color: 0x8c8780, roughness: 0.7 }))
+export const kerb = memo(() => litByLamps(new THREE.MeshStandardNodeMaterial({ color: 0x8c8780, roughness: 0.7 })))
 
 const toShape = ([outline, ...holes]: Polygon) => {
   const shape = new THREE.Shape(points(outline))

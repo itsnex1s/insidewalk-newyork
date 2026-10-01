@@ -1,13 +1,15 @@
 import * as THREE from 'three/webgpu'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
+import { attribute } from 'three/tsl'
 import { grove, type Kind } from '../engine/trees'
+import { lampGlow } from '../engine/night'
 import { instances, memo, prop } from '../engine/util'
 import type { TileData } from './data'
 import { KERB } from './streets'
 
 /**
  * The street trees of the 2015 census where they stood, each its kind's crown at a height from its trunk's girth, in
- * a pit of earth; and New York's cobra-head street lights along the kerbs.
+ * a pit of earth; and New York's cobra-head street lights along the kerbs, alight after dark.
  */
 
 /** The census's commonest SoHo trees as crown kinds (InsideWalk's Manhattan planting): planes, honey locusts, pears, the rest. */
@@ -47,15 +49,29 @@ export function trees(list: TileData['trees'], near: boolean) {
   return prop(group)
 }
 
-/** A cobra-head light, its arm along +x: a tapered grey pole, the arm curving out over the road, the head at its end. */
+/**
+ * A cobra-head light, its arm along +x: a tapered grey pole, the arm curving out over the road, the head at its end;
+ * `glow` 1 on the lens under the head, which lights after dark.
+ */
 const cobra = memo(() => {
   const pole = new THREE.CylinderGeometry(0.07, 0.11, 8.6, 10).translate(0, 4.3, 0)
   const base = new THREE.CylinderGeometry(0.2, 0.24, 0.9, 10).translate(0, 0.45, 0)
   const arm = new THREE.CylinderGeometry(0.05, 0.06, 2.3, 8).rotateZ(-Math.PI / 2 + 0.18).translate(1.1, 8.75, 0)
   const head = new THREE.BoxGeometry(0.75, 0.2, 0.36).translate(2.35, 8.95, 0)
-  return mergeGeometries([pole, base, arm, head].map((g) => g.toNonIndexed()))
+  const parts = [pole, base, arm, head].map((g) => g.toNonIndexed())
+  for (const g of parts) {
+    const normal = g.getAttribute('normal')
+    const glow = new Float32Array(normal.count)
+    if (g === parts[3]) for (let i = 0; i < normal.count; i++) glow[i] = normal.getY(i) < -0.5 ? 1 : 0
+    g.setAttribute('glow', new THREE.BufferAttribute(glow, 1))
+  }
+  return mergeGeometries(parts)
 })
-const lampGrey = memo(() => new THREE.MeshStandardNodeMaterial({ color: 0x5d625f, roughness: 0.55, metalness: 0.6 }))
+const lampGrey = memo(() => {
+  const m = new THREE.MeshStandardNodeMaterial({ color: 0x5d625f, roughness: 0.55, metalness: 0.6 })
+  m.emissiveNode = lampGlow().mul(attribute('glow', 'float'))
+  return m
+})
 
 /** A tile's street lights, placed by the data script along the kerbs, their arms over the road. */
 export function lights(list: TileData['lamps']) {
