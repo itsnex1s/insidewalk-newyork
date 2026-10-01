@@ -2,6 +2,13 @@
   "name": "insidewalk-newyork",
   "private": true,
   "version": "0.1.0",
+  "description": "Walk Lower Manhattan in 3D in the browser, built from NYC open data with three.js and WebGPU",
+  "license": "MIT",
+  "homepage": "https://newyork.insidewalk.app",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/itsnex1s/insidewalk-newyork.git"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
