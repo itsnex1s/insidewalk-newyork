@@ -26,11 +26,13 @@ const kindOf = (name: string) =>
 const pit = memo(() => new THREE.BoxGeometry(1.4, 0.04, 1.4).translate(0, 0.02, 0))
 const earth = memo(() => new THREE.MeshStandardNodeMaterial({ color: 0x3b3128, roughness: 1 }))
 
-/** A tile's street trees; `near` with full crowns, far off with sparser ones. Each kind keeps one crown shape everywhere, so tiles merge. */
+/** A tile's street trees; `near` with full crowns of their kinds, far off with sparser plane crowns. Each kind keeps one crown shape everywhere, so tiles merge. */
 export function trees(list: TileData['trees'], near: boolean) {
   const groups = new Map<string, { x: number; z: number; y: number; height: number }[]>()
   for (const [x, z, dbh, species] of list) {
-    const kind = kindOf(species)
+    // Down the street every tree has the plane's crown: a few pixels across, one kind of crown is one instanced mesh
+    // for its leaves and one for its bark, each a shader for three to build, where five kinds were ten a tile.
+    const kind = near ? kindOf(species) : 'plane'
     const points = groups.get(kind) ?? groups.set(kind, []).get(kind)!
     points.push({ x, z, y: KERB, height: Math.min(17, Math.max(4.5, 3 + dbh * 0.6)) })
   }

@@ -3,7 +3,9 @@
 //
 //   node scripts/still.mjs "<query>" <out.png> [--base http://localhost:5240] [--w 1600] [--h 1000]
 //   e.g. "at=0.5,-6,29" (x, z, bearing, pitch, height: see main.ts), "at=0,0,29,-35,250&rich"
-//   --eval "<expression>" prints what it evaluates to on the page once it is ready (window.castiron has the scene).
+//   --profile <ms> prints the main thread's costliest functions over that long after ready.
+//   --during <expression> is started (not awaited) as the profile begins.
+//   --eval "<expression>" prints what it evaluates to on the page once it is ready (window.city has the scene).
 import { spawn } from 'node:child_process'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -19,7 +21,7 @@ if (!out) {
 }
 const CHROME = process.env.CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 const wait = (ms) => new Promise((r) => setTimeout(r, ms))
-const profile = mkdtempSync(join(tmpdir(), 'castiron-still-'))
+const profile = mkdtempSync(join(tmpdir(), 'city-still-'))
 const port = 9300 + Math.floor(Math.random() * 500)
 const chrome = spawn(CHROME, ['--headless=new', '--enable-unsafe-webgpu', '--hide-scrollbars', '--no-first-run', '--disable-component-update', '--disable-background-networking', `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, `--window-size=${width},${height}`, 'about:blank'], { stdio: 'ignore' })
 try {
@@ -53,6 +55,27 @@ try {
   const ok = (await send('Runtime.evaluate', { expression: `new Promise((res) => { const t0 = Date.now(); const p = () => document.body.hasAttribute('data-ready') ? res(true) : Date.now() - t0 > 180000 ? res(false) : setTimeout(p, 200); p() })`, awaitPromise: true, returnByValue: true })).result.value
   if (!ok) throw new Error('the walk never reported ready')
   console.log(`ready in ${((Date.now() - t0) / 1000).toFixed(1)} s`)
+  const profileFor = Number(opt('--profile', 0))
+  if (profileFor) {
+    // The main thread's time for that long after ready, by function (self time), the costliest first.
+    await send('Profiler.enable')
+    await send('Profiler.setSamplingInterval', { interval: 500 })
+    await send('Profiler.start')
+    // Something to profile, started and left running: a walk, a turn.
+    const during = opt('--during', '')
+    if (during) send('Runtime.evaluate', { expression: during })
+    await wait(profileFor)
+    const { profile: cpu } = await send('Profiler.stop')
+    const dt = new Map(cpu.nodes.map((n) => [n.id, 0]))
+    cpu.samples.forEach((id, i) => dt.set(id, dt.get(id) + (cpu.timeDeltas[i] ?? 0)))
+    const self = new Map()
+    for (const n of cpu.nodes) {
+      const { functionName, url, lineNumber } = n.callFrame
+      const key = `${functionName || '(anonymous)'} ${url.split('/').pop().split('?')[0]}:${lineNumber + 1}`
+      self.set(key, (self.get(key) ?? 0) + dt.get(n.id) / 1000)
+    }
+    for (const [key, ms] of [...self].sort((a, b) => b[1] - a[1]).slice(0, 30)) console.log(`${ms.toFixed(0).padStart(7)} ms  ${key}`)
+  }
   const expression = opt('--eval', '')
   if (expression) console.log('eval:', (await send('Runtime.evaluate', { expression: `Promise.resolve(${expression}).then((v) => JSON.stringify(v))`, awaitPromise: true, returnByValue: true })).result.value)
   await wait(400)

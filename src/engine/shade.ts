@@ -51,8 +51,11 @@ function upright(m: THREE.Matrix4) {
   return e[1] === 0 && e[9] === 0 && e[4] === 0 && e[6] === 0 && e[3] === 0 && e[7] === 0 && e[11] === 0 && e[15] === 1 && e[5] > 0
 }
 
-/** The heights, metres above the ground, of `scene` over a square `size` metres wide centred on (cx, cz), into `data`. */
-function heights(scene: THREE.Scene, size: number, cx: number, cz: number, data: Float32Array) {
+/**
+ * The heights, metres above the ground, of `scene` over a square `size` metres wide centred on (cx, cz), into `data`;
+ * a generator that stops after each mesh, so the work can be spread over frames (`skyOcclusion`'s `start` and `step`).
+ */
+function* heights(scene: THREE.Scene, size: number, cx: number, cz: number, data: Float32Array) {
   data.fill(0)
   const cell = size / CELLS
   const half = size / 2
@@ -81,18 +84,22 @@ function heights(scene: THREE.Scene, size: number, cx: number, cz: number, data:
       }
     }
   }
-  scene.traverse((o) => {
+  const meshes: THREE.Object3D[] = []
+  scene.traverse((o) => void meshes.push(o))
+  for (const o of meshes) {
     const mesh = o as THREE.Mesh
     const material = mesh.material as THREE.Material
     // Leaves and fronds (drawn from both sides) are too open to take the sky away, and the most triangles there are.
-    if (!mesh.isMesh || !o.visible || o.layers.isEnabled(PROPS) || !material.depthWrite || material.side === THREE.DoubleSide) return
+    if (!mesh.isMesh || !o.visible || o.layers.isEnabled(PROPS) || !material.depthWrite || material.side === THREE.DoubleSide) continue
+    // Dropped (disposed) since the walk began: nothing to raise.
+    if (!o.parent) continue
     const position = mesh.geometry.getAttribute('position')
-    if (!position) return
+    if (!position) continue
     // A tile's merged mesh wholly outside the square raises nothing: its vertices are not even looked at.
     if (!(mesh as THREE.InstancedMesh).isInstancedMesh) {
       mesh.geometry.boundingSphere ?? mesh.geometry.computeBoundingSphere()
       const sphere = mesh.geometry.boundingSphere!
-      if (Math.abs(sphere.center.x - cx) > half + sphere.radius || Math.abs(sphere.center.z - cz) > half + sphere.radius) return
+      if (Math.abs(sphere.center.x - cx) > half + sphere.radius || Math.abs(sphere.center.z - cz) > half + sphere.radius) continue
     }
     const index = mesh.geometry.getIndex()
     // An upright box raises the cells under its top face to its top, and its sides and bottom reach no further out and
@@ -107,7 +114,8 @@ function heights(scene: THREE.Scene, size: number, cx: number, cz: number, data:
         raise(world, position, top && upright(world) ? top : index)
       }
     } else raise(mesh.matrixWorld, position, top && upright(mesh.matrixWorld) ? top : index)
-  })
+    yield
+  }
 }
 
 /**
@@ -131,14 +139,35 @@ export function skyOcclusion(scene: THREE.Scene, size: number, strength: number)
   const map = texture(heightMap)
   const scale = uniform(1 / size)
   const centre = uniform(new THREE.Vector2())
-  /** Bakes the heights again round (cx, cz): as the walker goes and tiles come and go. The shader stays as it is. */
+  /** Bakes the heights again round (cx, cz) at once. The shader stays as it is. */
   const bake = (cx: number, cz: number) => {
-    heights(scene, size, cx, cz, data)
+    for (const _ of heights(scene, size, cx, cz, data));
     pack(data, packed)
     heightMap.needsUpdate = true
     centre.value.set(cx, cz)
   }
-  bake(0, 0)
+  // A bake spread over frames: the heights into a map of their own while the old one is still drawn from.
+  const next = new Float32Array(CELLS * CELLS)
+  let job: { work: Generator; cx: number; cz: number } | null = null
+  /** Starts baking the heights round (cx, cz) a little a frame (`step`): as the walker goes and tiles come and go. */
+  const start = (cx: number, cz: number) => {
+    job = { work: heights(scene, size, cx, cz, next), cx, cz }
+  }
+  /** Bakes on for up to `ms` milliseconds; true when the map changed, the bake done. */
+  const step = (ms: number) => {
+    if (!job) return false
+    const until = performance.now() + ms
+    while (performance.now() < until) {
+      if (!job.work.next().done) continue
+      data.set(next)
+      pack(data, packed)
+      heightMap.needsUpdate = true
+      centre.value.set(job.cx, job.cz)
+      job = null
+      return true
+    }
+    return false
+  }
   const node = Fn(() => {
     // Taken before the branch below: the material's own shading reads them too, and what is first built inside a
     // branch is unset outside it.
@@ -174,5 +203,5 @@ export function skyOcclusion(scene: THREE.Scene, size: number, strength: number)
     })
     return open
   })()
-  return { node, bake }
+  return { node, bake, start, step }
 }

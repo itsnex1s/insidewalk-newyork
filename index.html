@@ -3,26 +3,122 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Lower Manhattan in 3D — InsideWalk</title>
+    <meta name="description" content="Walk the streets of Lower Manhattan in your browser, from SoHo to the Battery: every building, sidewalk and street tree from New York City’s open data." />
+    <!-- A preview, not for search: the server also sends X-Robots-Tag on every file (public/_headers). -->
     <meta name="robots" content="noindex, nofollow" />
-    <title>Castiron — walk Lower Manhattan</title>
+    <meta name="theme-color" content="#1b1c1e" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="preload" as="image" href="/poster.webp" fetchpriority="high" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;1,6..72,400&family=Schibsted+Grotesk:wght@400;500;600&display=swap" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="InsideWalk" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:url" content="https://newyork.insidewalk.app/" />
+    <meta property="og:title" content="Lower Manhattan in 3D — InsideWalk" />
+    <meta property="og:description" content="Walk the streets of Lower Manhattan in your browser, from SoHo to the Battery." />
+    <meta property="og:image" content="https://newyork.insidewalk.app/og.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:alt" content="Lower Manhattan in 3D, looking south over SoHo to the Financial District: InsideWalk" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Lower Manhattan in 3D — InsideWalk" />
+    <meta name="twitter:description" content="Walk the streets of Lower Manhattan in your browser, from SoHo to the Battery." />
+    <meta name="twitter:image" content="https://newyork.insidewalk.app/og.jpg" />
+    <meta name="twitter:image:alt" content="Lower Manhattan in 3D, looking south over SoHo to the Financial District: InsideWalk" />
+
     <style>
-      html, body { margin: 0; height: 100%; background: #1b1c1e; color: #f2efe8; font: 14px/1.4 ui-sans-serif, system-ui, -apple-system, sans-serif; overflow: hidden; }
+      :root {
+        --accent: #e8875c;
+        --paper: #f6f1ea;
+        --serif: Newsreader, 'Iowan Old Style', Georgia, serif;
+        --sans: 'Schibsted Grotesk', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      }
+      html, body { margin: 0; height: 100%; background: #1b1c1e; color: var(--paper); font: 14px/1.4 var(--sans); overflow: hidden; -webkit-font-smoothing: antialiased; }
       #view { position: fixed; inset: 0; touch-action: none; }
       #view canvas { display: block; width: 100%; height: 100%; }
-      .hud { position: fixed; left: 16px; pointer-events: none; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6); }
-      #title { top: 14px; font-weight: 600; letter-spacing: 0.02em; }
-      #title span { font-weight: 400; opacity: 0.75; }
-      #place { top: 36px; font-size: 18px; font-weight: 600; }
-      #hint { bottom: 14px; opacity: 0.8; font-size: 13px; }
-      #status { position: fixed; inset: 0; display: grid; place-items: center; font-size: 16px; background: #1b1c1e; }
+
+      .brand { display: inline-flex; align-items: center; gap: 7px; color: var(--paper); font: 600 16px/1 var(--sans); letter-spacing: -0.015em; text-decoration: none; }
+      .brand svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+      .brand .swing { stroke: var(--accent); stroke-width: 1.6; }
+      .brand b { font-weight: inherit; color: var(--accent); }
+
+      .hud { position: fixed; left: max(16px, env(safe-area-inset-left)); text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6); transition: opacity 0.6s 0.4s; }
+      body:not(.ready) .hud { opacity: 0; }
+      body.bare .hud { display: none !important; }
+      #title { top: max(14px, env(safe-area-inset-top)); display: flex; flex-direction: column; gap: 5px; }
+      #title .brand { filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.5)); }
+      #title > span { font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.85; }
+      #place { top: calc(max(14px, env(safe-area-inset-top)) + 46px); font: italic 400 24px/1.1 var(--serif); pointer-events: none; }
+      #hint { bottom: max(14px, env(safe-area-inset-bottom)); font-size: 13px; pointer-events: none; }
+      body.ready #hint { opacity: 0.8; }
+
+      /* The loading screen: the opening view as a still while the city is fetched and built behind it, then the 3D fades in where the still was. */
+      #loader { position: fixed; inset: 0; overflow: hidden; background: #2a2c2f; transition: opacity 0.9s ease, visibility 0s 0.9s; }
+      #loader.gone { opacity: 0; visibility: hidden; }
+      body.bare #loader { display: none; }
+      #loader .poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+      #loader .lqip { filter: blur(24px); transform: scale(1.1); }
+      #loader #poster { opacity: 0; transition: opacity 0.6s; }
+      #loader #poster.in { opacity: 1; }
+      /* Opened somewhere else (?at=): the still is of the default corner, so it stays a soft backdrop. */
+      #loader.elsewhere #poster { filter: blur(18px) brightness(0.8); transform: scale(1.08); }
+      #loader .veil { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(14, 15, 17, 0.4) 0%, rgba(14, 15, 17, 0) 28%, rgba(14, 15, 17, 0) 42%, rgba(14, 15, 17, 0.8) 100%); }
+      #loader .brand { position: absolute; top: max(22px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); font-size: 17px; filter: drop-shadow(0 1px 6px rgba(0, 0, 0, 0.45)); }
+      #loader .card { position: absolute; left: 0; right: 0; bottom: 0; padding: 0 20px max(40px, calc(env(safe-area-inset-bottom) + 24px)); display: grid; justify-items: center; text-align: center; }
+      #loader .kicker { margin: 0 0 10px; font-size: 12px; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase; opacity: 0.85; }
+      #loader h1 { margin: 0; font: 400 clamp(44px, 8vw, 84px)/0.95 var(--serif); letter-spacing: -0.02em; text-shadow: 0 2px 24px rgba(0, 0, 0, 0.35); }
+      #loader h1 em { font-style: italic; }
+      #loader .sub { margin: 14px 0 26px; max-width: 30em; font-size: 15px; line-height: 1.45; opacity: 0.88; }
+      #loader .bar { position: relative; width: min(300px, 72vw); height: 3px; border-radius: 3px; background: rgba(246, 241, 234, 0.22); overflow: hidden; }
+      #loader .bar i { position: absolute; inset: 0; background: var(--accent); transform-origin: left; transform: scaleX(0.03); transition: transform 0.5s ease; }
+      /* A glint along the bar, on the compositor: it keeps moving while the main thread is busy building shaders. */
+      #loader .bar::after { content: ''; position: absolute; top: 0; bottom: 0; width: 40%; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent); animation: glint 1.4s linear infinite; }
+      @keyframes glint { from { transform: translateX(-100%); } to { transform: translateX(260%); } }
+      #loader .stage { margin: 12px 0 0; min-height: 1.4em; font-size: 12px; letter-spacing: 0.03em; opacity: 0.75; font-variant-numeric: tabular-nums; }
+      #loader.failed .bar i { background: #d9534f; transform: scaleX(1); }
+      #loader.failed .bar::after { display: none; }
+      @media (prefers-reduced-motion: reduce) { #loader .bar::after { display: none; } }
     </style>
   </head>
   <body>
     <div id="view"></div>
-    <div id="title" class="hud">Castiron <span>· Lower Manhattan, New York</span></div>
+    <div id="title" class="hud">
+      <a class="brand" href="https://insidewalk.app/" aria-label="InsideWalk">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21h9V3H3v18M12 21v-9" /><path class="swing" d="M12 12a9 9 0 0 0-9 9" /></svg>
+        <span>Inside<b>Walk</b></span>
+      </a>
+      <span>Lower Manhattan, New York</span>
+    </div>
     <div id="place" class="hud"></div>
-    <div id="hint" class="hud">Click to look · WASD to walk · Shift to hurry · F to fly</div>
-    <div id="status">Loading Lower Manhattan…</div>
+    <div id="hint" class="hud">Drag or click to look · WASD to walk · Space to jump · Shift to hurry · F to fly</div>
+
+    <div id="loader" role="status" aria-live="polite">
+      <img class="poster lqip" alt="" src="data:image/webp;base64,UklGRg4BAABXRUJQVlA4IAIBAACQBgCdASowABgAPtFgqFAoJSOipWmZABoJYwC06CM24scOx7REiAv32VdM1Zbq52OZGRAZemv0y0iVzwQAAP75+7ldQKO3Mm7zTL27hAI6w75E1dCYPxWqf0BcNb15Sje9Qt9TA1QUsHncfVYfSylk9UQ8Ttl2k/IxthTw7tTw0JcIorl7njmzhxC9+STt6VHmetW/jlXH9yyL2YI+Zohqzg9ECQIfZ1qtpAiXjsL8hq+KfLgs43IMjGsKGxjURkzVSujNgjEvAH3MABe0Ic+oGGQ6JOPlQnB2Z21xKzprnzzGbCuDVM4IwynaqyOqUoNuiQBH9KHQ9XH5H2JrkAOgAAA=" />
+      <img class="poster" id="poster" alt="" src="/poster.webp" fetchpriority="high" onload="this.classList.add('in')" />
+      <div class="veil"></div>
+      <span class="brand">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21h9V3H3v18M12 21v-9" /><path class="swing" d="M12 12a9 9 0 0 0-9 9" /></svg>
+        <span>Inside<b>Walk</b></span>
+      </span>
+      <div class="card">
+        <p class="kicker">New York · in 3D</p>
+        <h1>Lower <em>Manhattan</em></h1>
+        <p class="sub">From SoHo to the Battery, every building, sidewalk and street tree from New York City’s open data.</p>
+        <div class="bar"><i></i></div>
+        <p class="stage" id="stage">Opening the map</p>
+      </div>
+    </div>
+    <script>
+      // Before the bundle: a page opened elsewhere than the poster's corner, or a still taken without the loading screen.
+      if (/[?&]at=/.test(location.search)) document.getElementById('loader').classList.add('elsewhere')
+      if (/[?&]bare(&|=|$)/.test(location.search)) document.body.classList.add('bare')
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

@@ -5,7 +5,7 @@ import { ao } from 'three/addons/tsl/display/GTAONode.js'
 import { builtinAOContext, cameraPosition, color, dot, float, fog, fract, luminance, mix, normalize, pass, positionView, positionWorld, pow, saturation, screenCoordinate, smoothstep, vec2, vec3, vec4 } from 'three/tsl'
 import { phone } from './device'
 import { skyOcclusion } from './shade'
-import { PROPS } from './util'
+import { PROPS, SKY } from './util'
 
 /**
  * An afternoon over the district (copied from InsideWalk's tower look.ts): a physical sky with some cloud, the sun low
@@ -73,6 +73,13 @@ function sky(size: number, disc: boolean, look: Look, light = false) {
   // mostly lost to the walls and the haze between.
   material.colorNode = vec4(light ? saturation(rgb, 0.4) : rgb, 1)
   return mesh
+}
+
+/** The sky for the glass's reflections: a dome of `size` metres on the SKY layer, which only their captures see. */
+export function reflectedSky(size: number, look: Look) {
+  const dome = sky(size, false, look)
+  dome.layers.set(SKY)
+  return dome
 }
 
 /** Image-based light from the sky above and the sunlit ground below, rendered once into a PMREM. */
@@ -151,7 +158,7 @@ export function outdoors(renderer: THREE.WebGPURenderer, scene: THREE.Scene, siz
   const reshadow = () => {
     sun.shadow.needsUpdate = true
   }
-  return { sun, follow, reshadow, bake: shade.bake }
+  return { sun, follow, reshadow, bake: shade.bake, rebake: shade.start, baking: shade.step }
 }
 
 function grade(rgb: THREE.Node<'vec3'>, { saturation: s, contrast, warmth }: Look['grade']) {
@@ -174,7 +181,9 @@ export function picture(renderer: THREE.WebGPURenderer, scene: THREE.Scene, came
   const pipeline = new THREE.RenderPipeline(renderer)
   const scenePass = pass(scene, camera, { samples: 4 })
   const sky = occlusion.get(scene)
-  if (sky) scenePass.contextNode = builtinAOContext(sky)
+  // The sky's occlusion for every render, not the pass alone: a pass's own context is set only while it draws, so
+  // shaders built ahead of it (`prepare`) would be built for another context and built again when it draws.
+  if (sky) renderer.contextNode = builtinAOContext(sky)
   const drawn = scenePass.getTextureNode()
   let rgb = drawn.rgb
   if (rich) {
@@ -188,5 +197,35 @@ export function picture(renderer: THREE.WebGPURenderer, scene: THREE.Scene, came
   }
   rgb = rgb.mul(noise.sub(0.5).mul(0.012).add(1))
   pipeline.outputNode = vec4(grade(rgb, grades.get(scene) ?? { saturation: 1, contrast: 1, warmth: 0 }), drawn.a)
-  return { pipeline, scenePass }
+
+  /**
+   * Builds the shaders `object` (in `scene`) needs for the scene pass, in the background: three builds a shader's
+   * nodes for every instanced mesh apart, a few milliseconds each, which drawn straight away is a frame of a tenth of a
+   * second each time a tile comes in. compileAsync builds them one at a time between frames, and the pass's first draw
+   * of them finds them built. Everything under `object` is taken, in view or not.
+   */
+  function prepare(object: THREE.Object3D, onProgress?: (e: ProgressEvent) => void) {
+    const culled: THREE.Object3D[] = []
+    object.traverse((o) => {
+      if (o.frustumCulled) culled.push(o)
+      o.frustumCulled = false
+    })
+    const [target, mrt] = [renderer.getRenderTarget(), renderer.getMRT()]
+    // compileAsync takes the render target and the objects to build before its first await. Its render context is
+    // asked for at depth 0, and the pass draws at depth 1 (inside the pipeline's draw of the screen): the same depth
+    // here, or nothing it builds would be found again.
+    const contexts = (renderer as unknown as { _renderContexts: { get(...args: unknown[]): unknown } })._renderContexts
+    const get = contexts.get
+    contexts.get = (target: unknown, mrt: unknown) => get.call(contexts, target, mrt, 1)
+    renderer.setRenderTarget(scenePass.renderTarget)
+    renderer.setMRT(scenePass.getMRT())
+    const built = renderer.compileAsync(object, camera, scene, onProgress ?? null)
+    contexts.get = get
+    renderer.setRenderTarget(target)
+    renderer.setMRT(mrt)
+    for (const o of culled) o.frustumCulled = true
+    return built.catch((e) => console.warn(e))
+  }
+
+  return { pipeline, scenePass, prepare }
 }

@@ -39,6 +39,8 @@ export const standing = memo(() => new THREE.BoxGeometry(1, 1, 1).translate(0, 0
  * sprawl and the skyline. The baked sky occlusion (shade.ts) leaves them out.
  */
 export const PROPS = 1
+/** The sky dome the reflections' captures draw behind the city (engine/reflections.ts); no other camera sees it. */
+export const SKY = 2
 
 /** Moves `object` and all under it onto the PROPS layer. */
 export function prop<T extends THREE.Object3D>(object: T) {
